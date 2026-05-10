@@ -77,7 +77,8 @@ If you want to feed Drive documents in as context:
 
 **Basic research from questions only:**
 ```bash
-python research.py --questions questions/competitive.md --topic "AI note-taking apps"```
+python research.py --questions questions/competitive.md --topic "AI note-taking apps"
+```
 
 **With a Google Drive document as context:**
 ```bash
