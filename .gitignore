@@ -1,0 +1,32 @@
+# Virtual environments
+venv/
+.venv/
+
+# Environment variables
+.env
+
+# Credentials files
+credentials.json
+token.json
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+
+# Generated PRDs
+output/
