@@ -28,5 +28,6 @@ dist/
 .vscode/
 .idea/
 
-# Generated PRDs
+# Output files
 output/
+runs/

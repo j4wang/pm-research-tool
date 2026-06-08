@@ -1,110 +1,118 @@
 # PM Research Assistant
 
-An agentic research tool for product managers. Give it a set of research questions, point it at relevant documents in Google Drive, and it searches the web, reads your context, and produces a structured research brief — optionally saving it directly to Notion.
+A research tool for product managers. Point it at a set of questions, optionally give it a Google Doc for context, and it searches the web, reads your documents, and writes a structured brief, saving it to Notion if you want.
 
-Built on the Anthropic API's tool use feature, which mirrors the patterns used in Model Context Protocol (MCP) agents: Claude decides which tools to call, in what order, based on the task at hand.
+Built on Anthropic's tool use API, which is the same pattern that powers MCP agents. The model decides what to look up and in what order, rather than following a hardcoded sequence.
 
 ---
 
 ## What it does
 
-- Accepts a markdown file of research questions as input
-- Optionally reads a Google Doc as context before starting research
-- Runs web searches via Tavily to gather current information
-- Synthesizes findings into a structured brief
-- Optionally writes the output directly to a Notion page
+- Takes a markdown file of research questions as input
+- Optionally reads a Google Doc as context before starting
+- Searches the web via Tavily
+- Writes a structured research brief
+- Optionally saves output directly to a Notion page
+- Traces every run in Phoenix (spans for each API call and tool dispatch)
+- Scores output quality automatically using LLM-as-judge evals, logged to Langfuse
 
-## Example use cases
+## When to use it
 
-- Competitive landscape analysis before writing a PRD
+- Competitive landscape research before writing a PRD
 - Market research for a new feature area
-- Background research on a customer segment or vertical
-- Summarizing what's known before a strategy review
+- Background on a customer segment or vertical
+- Getting up to speed before a strategy review
 
 ---
 
 ## Setup
 
-### Prerequisites
+### What you need
 
 - Python 3.11+
 - An [Anthropic API key](https://console.anthropic.com)
 - A [Tavily API key](https://tavily.com)
-- A [Notion integration token](https://developers.notion.com) (optional, for output)
-- Google Drive API credentials (optional, for context documents)
+- A [Notion integration token](https://developers.notion.com): optional, only needed if you want Notion output
+- Google Drive API credentials: optional, only needed if you want to feed in a Drive doc as context
+- A [Langfuse account](https://langfuse.com): optional, only needed for eval logging and prompt versioning
+- [Phoenix](https://phoenix.arize.com) running locally: optional, only needed for distributed tracing
 
-### Install dependencies
+### Install
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Configure environment variables
+### Configure
 
 Create a `.env` file in the project root:
 
 ```
 ANTHROPIC_API_KEY=your_key_here
 TAVILY_API_KEY=your_key_here
-NOTION_API_KEY=your_integration_token_here
 
-# Optional — script will skip Notion output if not set
+# Notion output (optional)
+NOTION_API_KEY=your_integration_token_here
 NOTION_PAGE_ID=your_page_id_here
 
-# Optional — defaults to claude-sonnet-4-6 if not set
+# Observability (optional, tool works without these)
+LANGFUSE_PUBLIC_KEY=your_key_here
+LANGFUSE_SECRET_KEY=your_key_here
+LANGFUSE_HOST=https://cloud.langfuse.com
+
+# Model (optional, defaults to claude-sonnet-4-6)
 ANTHROPIC_MODEL=claude-sonnet-4-6
 ```
 
-The default model is `claude-sonnet-4-6` (current as of May 2026). Check the 
-[Anthropic deprecation docs](https://docs.anthropic.com/en/docs/resources/model-deprecations) 
-for the latest recommended model and update `ANTHROPIC_MODEL` accordingly.
-
-Note: Sonnet is recommended over Opus for this use case. Opus's improvements 
-are focused on advanced coding and long-horizon engineering tasks — research 
-synthesis and web search don't benefit meaningfully from the additional cost.
+Sonnet is the right default for this use case. Opus's improvements are concentrated in complex coding and long-horizon engineering tasks, but for research synthesis, the quality difference isn't meaningful and Sonnet runs about 20% cheaper.
 
 ### Google Drive setup (optional)
 
-If you want to feed Drive documents in as context:
-
 1. Create a Google Cloud project and enable the Drive API
-2. Create an OAuth 2.0 Desktop App credential and download it as `credentials.json` in the project root
-3. The first time you run the script with `--context-doc`, a browser window will open asking you to authorize access — this only happens once
+2. Create an OAuth 2.0 Desktop App credential and save it as `credentials.json` in the project root
+3. The first time you run with `--context-doc`, a browser window opens for authorization, just once
+
+### Observability setup (optional)
+
+Start Phoenix before running the tool if you want distributed traces:
+
+```bash
+phoenix serve
+```
+
+This opens a local UI at `http://localhost:6006`. Traces appear there automatically after each run.
+
+For Langfuse, create a free account at [langfuse.com](https://langfuse.com), create a project, and copy the three keys into your `.env`. The tool will register the system prompt in Langfuse on first run and log eval scores after each research session.
 
 ---
 
 ## Usage
 
-**Basic research from questions only:**
+**Basic:**
 ```bash
 python research.py --questions questions/competitive.md --topic "AI note-taking apps"
 ```
 
-**With a Google Drive document as context:**
+**With a Google Drive doc as context:**
 ```bash
 python research.py --questions questions/competitive.md --topic "AI note-taking apps" --context-doc <drive-file-id>
 ```
 
-The Drive file ID is the long string in the document URL:
-`https://docs.google.com/document/d/FILE_ID_IS_HERE/edit`
+The file ID is the long string in the document URL: `https://docs.google.com/document/d/FILE_ID_IS_HERE/edit`
 
 **With Notion output:**
 ```bash
 python research.py --questions questions/competitive.md --topic "AI note-taking apps" --notion-page <notion-page-id>
 ```
 
-The Notion page ID is the string at the end of the page URL (without any query parameters).
-
-Note: If NOTION_PAGE_ID is set in your .env file, you can omit --notion-page entirely 
-and output will go there automatically.
-
-**All options combined:**
+**Skip the eval suite** (useful when iterating on the research prompt):
 ```bash
-python research.py \
-  --questions questions/competitive.md \
-  --topic <quoted string with company or industry> \
-  --context-doc <drive-file-id> \
-  --notion-page <notion-page-id>
+python research.py --questions questions/competitive.md --topic "AI note-taking apps" --skip-evals
+```
+
+**Re-run evals against a previous run** (without re-running the research):
+```bash
+python -m evals.run_evals --run-dir runs/20260608_001254
 ```
 
 ---
@@ -113,15 +121,22 @@ python research.py \
 
 ```
 pm-research-assistant/
-├── research.py              # Main entry point and agentic loop
+├── research.py              # Agentic loop and entry point
+├── observability.py         # Phoenix and Langfuse initialization
 ├── tools/
 │   ├── search.py            # Tavily web search
 │   ├── drive.py             # Google Drive reader
 │   └── notion.py            # Notion page writer
+├── evals/
+│   ├── run_evals.py         # Eval runner (question coverage, groundedness, synthesis)
+│   └── prompts/
+│       ├── question_coverage.md
+│       ├── groundedness.md
+│       └── synthesis_quality.md
 ├── questions/
 │   └── competitive.md       # Example question template
+├── runs/                    # Run artifacts (gitignored)
 ├── requirements.txt
-├── credentials.json         # Google OAuth credentials (not committed)
 └── .env                     # API keys (not committed)
 ```
 
@@ -131,53 +146,53 @@ pm-research-assistant/
 
 `research.py` runs an agentic loop:
 
-1. The research questions (and any context doc reference) are sent to Claude along with tool definitions
-2. Claude decides which tools to call — web searches, Drive reads — and in what order
-3. Tool results are fed back into the conversation
-4. Claude continues until it has enough information to write the brief
-5. If a Notion page ID was provided, Claude calls the Notion tool to save the output
-
-This is the same pattern used in MCP-based agents: the model orchestrates tool calls rather than the developer hardcoding a sequence of steps.
----
-
-## Customizing research questions
-
-The `questions/` directory holds markdown templates. Copy and edit `competitive.md` to create new templates for different research types (user research, market sizing, feature benchmarking, etc.).
-
-The template format is flexible — Claude reads the whole file, so plain prose questions work just as well as structured lists.
+1. Research questions (and any context doc) are sent to Claude with tool definitions
+2. Claude decides which tools to call and in what order: web searches, Drive reads
+3. Tool results are added to the conversation history
+4. Claude keeps going until it has enough to write the brief
+5. If a Notion page ID is set, Claude calls the Notion tool to save the output
+6. The full run is written to `runs/<timestamp>/result.json`: tool calls, token counts, trace IDs, and the brief itself
+7. The eval suite runs automatically, scoring the brief on coverage, groundedness, and synthesis quality, with results logged to Langfuse
 
 ---
 
-## Extending this project
+## Observability
 
-Some natural next steps:
+Each research run produces:
 
-- **Add a Confluence writer** alongside Notion for teams on Atlassian
-- **Add a questions generator** that takes a one-liner topic and produces a questions file automatically
-- **Connect to true MCP servers** (Tavily, Google Drive, and Notion all publish MCP servers) to replace the Python tool implementations
-- **Add output templates** the way the PRD generator uses markdown templates, to control the shape of the research brief
+**A Phoenix trace** showing the full execution graph, including every Anthropic API call as a span (with token counts, latency, stop reason) and every tool dispatch as a child span. Useful for diagnosing slow runs or understanding which tool calls contributed to the brief.
+
+**Three Langfuse eval scores:**
+- *Question coverage*: did the brief actually answer the research questions?
+- *Groundedness*: are the claims traceable to retrieved sources?
+- *Synthesis quality*: does the brief draw conclusions, or just summarize?
+
+The system prompt is versioned in Langfuse, so prompt changes are tracked and you can compare eval scores across versions.
+
+---
+
+## Customizing questions
+
+The `questions/` directory holds markdown templates. Copy and edit `competitive.md` for different research types — user research, market sizing, feature benchmarking, etc. The format is flexible; Claude reads the whole file.
 
 ---
 
-## Engineering notes This project started as a straightforward tool-chaining exercise but surfaced several non-obvious production API challenges worth documenting. 
+## Engineering notes
 
-**Agentic loop design.** The core pattern (Claude decides which tools to call rather than the developer hardcoding a sequence) means the conversation history grows with every tool use round-trip. At 30,000 input tokens per minute (the default Sonnet rate limit), a research run with 8-10 tool calls can hit the ceiling mid-session. The fix was a combination of a baseline sleep between calls and exponential backoff retry logic on rate limit errors. 
+**Agentic loop and rate limits.** Conversation history grows with every tool call round-trip. At 30,000 input tokens/minute (the Sonnet default), a run with 8-10 tool calls can hit the ceiling mid-session. The fix was a 5-second sleep between calls plus exponential backoff on rate limit errors.
 
-**Notion's block API.** Notion imposes a 100-block limit per API call and requires table rows to be passed inline with the parent table block in a single request; they cannot be appended separately. Both constraints required non-obvious workarounds that aren't prominently documented. 
+**Notion's block API.** Two non-obvious constraints: 100-block limit per API call, and table rows must be passed inline with the parent table block in the same request — they can't be appended separately afterward.
 
-**Markdown to Notion conversion.** Claude outputs markdown, but Notion's API expects structured block objects. Building the converter revealed several edge cases: table cells require rich_text objects (not plain strings) to support inline bold and italic, consecutive plain-text lines need buffering to form single paragraph blocks rather than rendering as separate elements, and headings must be matched longest-prefix-first to avoid ### being caught by the # handler.
+**Markdown to Notion conversion.** Claude outputs markdown; Notion expects structured block objects. Edge cases worth knowing: table cells need `rich_text` objects (not plain strings), consecutive plain-text lines need buffering to form a single paragraph block, and heading patterns must be matched longest-prefix-first.
 
-**Model selection.** Opus 4.7 and Sonnet 4.6 produce comparable output quality for research synthesis tasks. Sonnet ran approximately 20% cheaper on identical inputs. Opus's advantages are concentrated in advanced coding and long-horizon engineering tasks, which don't apply here. 
+**Observability and the v4 SDK.** The Langfuse Python SDK was rewritten in v4 (released March 2026) with a new observation-centric data model. `lf.trace()` is gone; traces are created via `lf.start_observation()`. Scores use `lf.create_score()`. Worth knowing if you're referencing older docs or examples.
 
-**Google OAuth in testing mode.** Apps using External OAuth must explicitly allowlist test users in Google Cloud Console. The error message (403: access_denied) doesn't make this obvious.
-
-**Application configuration.** The tool uses a three-layer config system (CLI flag > .env > hardcoded default) that mirrors production API patterns, making it easy to swap models or update credentials without touching code.
-
-**Scope management.** The iteration path (build, run, hit real errors, fix them) reflects the core PM instinct of starting with the minimal viable tool and adding complexity (tables, batching, retries) only when real usage surfaced the need for it.
+**Google OAuth in testing mode.** Apps using External OAuth need test users explicitly allowlisted in Google Cloud Console. The error (`403: access_denied`) doesn't make this obvious.
 
 ---
+
 ## Notes
 
-- Google Drive access uses `drive.readonly` scope — the script can read but not modify your Drive
-- The Notion integration only has access to pages you explicitly share with it (via Connections in the page settings)
-- API calls to Anthropic and Tavily consume quota — a typical research run makes 3-8 web searches and 1-2 Claude calls
+- Google Drive access uses `drive.readonly` scope, so the tool can read but not modify your Drive
+- The Notion integration only has access to pages you explicitly share with it via Connections
+- A typical run makes 8-18 web searches and uses roughly 100K-150K input tokens
