@@ -2,6 +2,22 @@
 research.py
 PM Research Assistant — an agentic research tool for product managers.
 
+MCP CONVERSION NOTE:
+web_search and the two drive_* tools are now served by real MCP servers
+(mcp-servers/search-server, mcp-servers/drive-server) instead of direct
+SDK calls. tools/search.py and tools/drive.py have been removed; their
+logic now lives entirely inside the corresponding MCP server. This file
+is now an MCP client: it spawns both servers as subprocesses over stdio,
+discovers their tools via list_tools(), and routes Claude's tool_use
+blocks to the correct session instead of calling dispatch functions
+directly.
+
+notion_create_page deliberately stays as a direct SDK call. Converting
+all three tools to MCP servers wasn't worth doing for the learning goal
+here — two servers already exercise multi-server routing, and a third
+teaches nothing the first two didn't. See pm_research_tool_mcp_conversion.md
+for the reasoning.
+
 Usage:
   python research.py --questions questions/competitive.md --topic "AI note-taking apps"
   python research.py --questions questions/competitive.md --topic "Figma competitors" --context-doc <google-drive-file-id>
@@ -9,10 +25,10 @@ Usage:
 
 Environment variables required (set in .env):
   ANTHROPIC_API_KEY
-  TAVILY_API_KEY
-  NOTION_API_KEY     (only needed if writing to Notion)
-  NOTION_PAGE_ID     (optional default page; overridden by --notion-page)
-  ANTHROPIC_MODEL    (optional; overridden by --model)
+  TAVILY_API_KEY       (read by search-server, not this file, now)
+  NOTION_API_KEY        (only needed if writing to Notion)
+  NOTION_PAGE_ID         (optional default page; overridden by --notion-page)
+  ANTHROPIC_MODEL        (optional; overridden by --model)
 
 Observability (optional — tool works without these):
   LANGFUSE_PUBLIC_KEY
@@ -22,19 +38,20 @@ Observability (optional — tool works without these):
 """
 
 import argparse
+import asyncio
 import json
 import os
 import sys
 import time
-from contextlib import nullcontext
+from contextlib import AsyncExitStack, nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 
 import anthropic
 from dotenv import load_dotenv
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 
-from tools.search import search as tavily_search, TOOL_DEFINITION as SEARCH_TOOL
-from tools.drive import read_document, list_files, READ_TOOL_DEFINITION, LIST_TOOL_DEFINITION
 from tools.notion import create_page, TOOL_DEFINITION as NOTION_TOOL
 from observability import get_tracer, get_langfuse, get_system_prompt, try_init_observability
 
@@ -42,6 +59,18 @@ load_dotenv()
 
 MODEL_DEFAULT = "claude-sonnet-4-6"
 MAX_TOKENS = 16500
+
+# Circuit breaker: if a single tool fails this many times in a row within
+# one run, it gets dropped from the tools list offered to Claude for the
+# rest of that run. Consecutive, not total — a success resets a tool's
+# count to zero, so a few isolated failures spread across a long run
+# won't trip this.
+MAX_CONSECUTIVE_TOOL_FAILURES = 3
+
+# Paths to the two MCP servers, resolved relative to this file so it
+# doesn't matter what cwd research.py itself gets launched from.
+SEARCH_SERVER_PATH = Path(__file__).resolve().parent / "mcp-servers" / "search-server" / "server.py"
+DRIVE_SERVER_PATH = Path(__file__).resolve().parent / "mcp-servers" / "drive-server" / "server.py"
 
 SYSTEM_PROMPT = """You are a senior product manager's research assistant. Your job is to 
 produce thorough, structured research briefs by chaining together web searches, reading 
@@ -71,24 +100,69 @@ def _write_run_artifact(run_dir: Path, result: dict) -> None:
         json.dump(result, f, indent=2, ensure_ascii=False)
 
 
-def dispatch_tool(tool_name: str, tool_input: dict, notion_page_id: str = None) -> str:
+async def connect_mcp_server(stack: AsyncExitStack, server_path: Path) -> ClientSession:
+    """
+    Spawn one MCP server as a subprocess over stdio and return an
+    initialized ClientSession for it. The subprocess and the session
+    are both registered on `stack`, so they get torn down together
+    when the AsyncExitStack closes, regardless of which one fails
+    first or whether an exception is raised in between.
+
+    Uses sys.executable so the spawned server runs under the same
+    interpreter (and therefore the same venv) as this script, instead
+    of whatever "python" happens to resolve to on PATH.
+    """
+    params = StdioServerParameters(
+        command=sys.executable,
+        args=[str(server_path)],
+    )
+    read, write = await stack.enter_async_context(stdio_client(params))
+    session = await stack.enter_async_context(ClientSession(read, write))
+    await session.initialize()
+    return session
+
+
+def _mcp_tool_to_anthropic_tool(mcp_tool) -> dict:
+    """
+    Convert one MCP Tool schema into the shape the Anthropic API
+    expects. The two protocols use different field names for the same
+    concept (inputSchema vs input_schema) but the schema content
+    itself is identical JSON Schema, so this is just a rename.
+    """
+    return {
+        "name": mcp_tool.name,
+        "description": mcp_tool.description,
+        "input_schema": mcp_tool.inputSchema,
+    }
+
+
+async def dispatch_tool(
+    tool_name: str,
+    tool_input: dict,
+    tool_routing: dict,
+    notion_page_id: str = None,
+) -> str:
     """
     Route a tool call to the appropriate implementation and return a string result.
 
-    Each call is wrapped as a Phoenix child span (tool_dispatch) when observability
-    is initialized. The span is automatically parented to the current research_run
-    span via OTel context propagation, so tool latency shows up nested under the
-    correct LLM turn in the trace.
+    Two dispatch paths now instead of one big if/elif:
+      - If tool_name is in tool_routing, it came from list_tools() on one of
+        the MCP sessions, and we call it on whichever session owns it. This
+        is the "no hardcoded knowledge of which server provides which tool"
+        requirement — tool_routing is built dynamically at startup, not
+        written out here as literal tool names.
+      - notion_create_page stays a direct SDK call, same as before the
+        conversion, since it was deliberately not converted to MCP.
+
+    Each call is still wrapped as a Phoenix child span (tool_dispatch) when
+    observability is initialized, same as before.
     """
-    # Build a Phoenix span for this tool call if observability is active.
-    # nullcontext() is a no-op stand-in when it isn't.
     try:
         tracer = get_tracer()
         span_ctx = tracer.start_as_current_span(
             "tool_dispatch",
             attributes={
                 "tool.name": tool_name,
-                # Truncate large inputs — spans aren't a storage layer.
                 "tool.input_summary": json.dumps(tool_input)[:500],
             },
         )
@@ -96,23 +170,32 @@ def dispatch_tool(tool_name: str, tool_input: dict, notion_page_id: str = None) 
         span_ctx = nullcontext()
 
     with span_ctx as span:
-        if tool_name == "web_search":
-            results = tavily_search(
-                query=tool_input["query"],
-                max_results=tool_input.get("max_results", 5),
-            )
-            result = json.dumps(results, indent=2)
-
-        elif tool_name == "drive_read_document":
-            result = read_document(tool_input["file_id"])
-
-        elif tool_name == "drive_list_files":
-            files = list_files(
-                folder_id=tool_input.get("folder_id"),
-                query=tool_input.get("query"),
-                max_results=tool_input.get("max_results", 10),
-            )
-            result = json.dumps(files, indent=2)
+        if tool_name in tool_routing:
+            session = tool_routing[tool_name]
+            try:
+                mcp_result = await session.call_tool(tool_name, tool_input)
+                # MCP tool results are a list of content blocks (usually
+                # just one TextContent for our servers). Join any text
+                # blocks into the same flat string shape dispatch_tool
+                # always returned.
+                result = "\n".join(
+                    block.text for block in mcp_result.content if hasattr(block, "text")
+                )
+            except Exception as exc:
+                # This is a transport-level failure, not a tool reporting
+                # its own error. The server's own code already catches
+                # everything it can and returns clean error text for
+                # things like a missing API key (see search-server). This
+                # catch is for the layer below that: the subprocess died,
+                # the pipe broke, the session timed out. Without this, an
+                # exception here would propagate up through the while
+                # loop and crash the entire research run, losing the
+                # brief in progress. A clear error result lets Claude
+                # keep working with the tools that are still alive.
+                result = (
+                    f"Tool '{tool_name}' failed at the transport level: {exc}. "
+                    f"The MCP server may have crashed or stopped responding."
+                )
 
         elif tool_name == "notion_create_page":
             page_id = tool_input.get("parent_page_id") or notion_page_id
@@ -129,31 +212,35 @@ def dispatch_tool(tool_name: str, tool_input: dict, notion_page_id: str = None) 
         else:
             result = f"Error: unknown tool '{tool_name}'"
 
-        # Record result size on the span so the Phoenix UI shows it.
         if span is not None:
             span.set_attribute("tool.result_length_chars", len(result))
 
         return result
 
 
-def create_with_retry(client, max_retries: int = 3, **kwargs):
+async def create_with_retry(client, max_retries: int = 3, **kwargs):
     """
     Call client.messages.create with exponential backoff on rate limit errors.
     Retries up to max_retries times, waiting 10s, 20s, 30s between attempts.
     Raises RuntimeError if all retries are exhausted.
+
+    Same logic as before, just async: awaits the API call and uses
+    asyncio.sleep instead of time.sleep so the backoff doesn't block
+    the event loop (which matters now that there are MCP subprocess
+    sessions alive concurrently).
     """
     for attempt in range(max_retries):
         try:
-            return client.messages.create(**kwargs)
+            return await client.messages.create(**kwargs)
         except anthropic.RateLimitError:
             if attempt == max_retries - 1:
                 raise RuntimeError("Rate limit retries exhausted — try again in a minute.")
             wait = 10 * (attempt + 1)
             print(f"\n[Rate limit hit — retrying in {wait}s]\n")
-            time.sleep(wait)
+            await asyncio.sleep(wait)
 
 
-def run_research(
+async def run_research(
     questions: str,
     topic: str = None,
     context_doc_id: str = None,
@@ -164,6 +251,10 @@ def run_research(
     """
     Main agentic loop. Sends the research questions to Claude, handles tool calls,
     and loops until Claude produces a final response.
+
+    Now async end to end: the Anthropic client is AsyncAnthropic, the two
+    MCP servers are connected and held open for the duration of the run via
+    an AsyncExitStack, and dispatch_tool is awaited per tool call.
 
     When observability is initialized:
       - A root Phoenix span (research_run) wraps the entire loop. Child spans for
@@ -220,8 +311,6 @@ def run_research(
     # --- Agentic loop -------------------------------------------------------
 
     with root_span_ctx as root_span:
-        # Capture the Phoenix trace ID from the active span context.
-        # This links the run artifact back to the Phoenix UI.
         if root_span is not None:
             from opentelemetry import trace as otel_trace
             span_ctx = otel_trace.get_current_span().get_span_context()
@@ -234,112 +323,182 @@ def run_research(
         brief = ""
         turn = 0
 
-        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        # Circuit breaker state: consecutive failure count per tool name,
+        # and which tools we've already announced as dropped (so we only
+        # print the notice once per tool, not every subsequent turn).
+        tool_failure_counts = {}
+        dropped_tools = set()
 
-        tools = [SEARCH_TOOL, READ_TOOL_DEFINITION, LIST_TOOL_DEFINITION]
-        if notion_page_id:
-            tools.append(NOTION_TOOL)
+        client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
-        base_questions = f"Research topic: {topic}\n\n{questions}" if topic else questions
-        if context_doc_id:
-            user_message = (
-                f"Context document (Google Drive file ID): {context_doc_id}\n\n"
-                f"Please read this document first, then answer the following research questions:\n\n"
-                f"{base_questions}"
-            )
-        else:
-            user_message = base_questions
+        # --- MCP setup --------------------------------------------------
+        # Both servers are connected once, up front, and held open for the
+        # whole run via the AsyncExitStack. This is the part that didn't
+        # exist before the conversion: tools used to be three Python
+        # imports, now they're two live subprocess sessions we have to
+        # manage the lifecycle of ourselves.
+        async with AsyncExitStack() as mcp_stack:
+            search_session = await connect_mcp_server(mcp_stack, SEARCH_SERVER_PATH)
+            drive_session = await connect_mcp_server(mcp_stack, DRIVE_SERVER_PATH)
 
-        if notion_page_id:
-            user_message += (
-                f"\n\nWhen you have completed the research brief, save it to Notion "
-                f"using page ID: {notion_page_id}"
-            )
+            search_tools = (await search_session.list_tools()).tools
+            drive_tools = (await drive_session.list_tools()).tools
 
-        messages = [{"role": "user", "content": user_message}]
+            # tool_routing maps a tool name to the session that owns it.
+            # Built dynamically from what each server actually reports,
+            # not hardcoded — this is what lets the agent loop discover
+            # and use tools from both servers with no built-in knowledge
+            # of which server provides which tool.
+            tool_routing = {}
+            tools = []
+            for mcp_tool in search_tools:
+                tool_routing[mcp_tool.name] = search_session
+                tools.append(_mcp_tool_to_anthropic_tool(mcp_tool))
+            for mcp_tool in drive_tools:
+                tool_routing[mcp_tool.name] = drive_session
+                tools.append(_mcp_tool_to_anthropic_tool(mcp_tool))
 
-        print("Starting research...\n")
+            if notion_page_id:
+                tools.append(NOTION_TOOL)
 
-        while True:
-            turn += 1
-            response = create_with_retry(
-                client,
-                model=model,
-                max_tokens=MAX_TOKENS,
-                system=system_prompt,
-                tools=tools,
-                messages=messages,
-            )
-
-            # Brief pause between calls to stay within the token-per-minute rate limit.
-            # The conversation history grows with each tool use round-trip, so without
-            # this delay rapid successive calls can exceed 30,000 input tokens/minute.
-            time.sleep(5)
-            total_input_tokens += response.usage.input_tokens
-            total_output_tokens += response.usage.output_tokens
-
-            # Collect text blocks for printing. On end_turn, also save as the brief.
-            text_parts = [
-                block.text for block in response.content if hasattr(block, "text")
-            ]
-            for text in text_parts:
-                print(text)
-
-            if response.stop_reason == "end_turn":
-                brief = "\n\n".join(text_parts)
-                break
-
-            if response.stop_reason == "tool_use":
-                tool_results = []
-                for block in response.content:
-                    if block.type == "tool_use":
-                        print(f"\n[Tool call: {block.name}({json.dumps(block.input, indent=2)})]\n")
-
-                        # Time the dispatch separately from the Phoenix span latency so
-                        # the artifact has the data independently of the tracing backend.
-                        t0 = time.time()
-                        result = dispatch_tool(block.name, block.input, notion_page_id)
-                        latency_ms = int((time.time() - t0) * 1000)
-
-                        tool_calls_log.append({
-                            "turn": turn,
-                            "tool": block.name,
-                            "input": block.input,
-                            # 200-char preview is enough for the groundedness eval
-                            # without bloating the artifact with full search results.
-                            "result_preview": result[:1000],
-                            "result_length_chars": len(result),
-                            "latency_ms": latency_ms,
-                        })
-
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": result,
-                        })
-
-                # Append assistant response and tool results to message history
-                messages.append({"role": "assistant", "content": response.content})
-                messages.append({"role": "user", "content": tool_results})
+            base_questions = f"Research topic: {topic}\n\n{questions}" if topic else questions
+            if context_doc_id:
+                user_message = (
+                    f"Context document (Google Drive file ID): {context_doc_id}\n\n"
+                    f"Please read this document first, then answer the following research questions:\n\n"
+                    f"{base_questions}"
+                )
             else:
-                print(f"Unexpected stop reason: {response.stop_reason}")
-                break
+                user_message = base_questions
 
-        print(f"\nTotal tokens — input: {total_input_tokens}, output: {total_output_tokens}")
+            if notion_page_id:
+                user_message += (
+                    f"\n\nWhen you have completed the research brief, save it to Notion "
+                    f"using page ID: {notion_page_id}"
+                )
 
-        # Attach final token totals to the root span for Phoenix dashboards.
-        if root_span is not None:
-            root_span.set_attribute("research.total_input_tokens", total_input_tokens)
-            root_span.set_attribute("research.total_output_tokens", total_output_tokens)
-            root_span.set_attribute("research.tool_call_count", len(tool_calls_log))
-            
-        if lf_trace is not None:
-            lf_trace.end()
-            lf.flush()
+            messages = [{"role": "user", "content": user_message}]
+
+            print("Starting research...\n")
+
+            while True:
+                turn += 1
+
+                # Apply the circuit breaker: filter out any tool that's
+                # crossed the failure threshold before sending the tools
+                # list to Claude. Recomputed each turn (cheap, just a list
+                # comprehension) rather than mutating `tools` in place, so
+                # there's a single source of truth for "what's currently
+                # offered" with no risk of it drifting from dropped_tools.
+                active_tools = [t for t in tools if t["name"] not in dropped_tools]
+
+                response = await create_with_retry(
+                    client,
+                    model=model,
+                    max_tokens=MAX_TOKENS,
+                    system=system_prompt,
+                    tools=active_tools,
+                    messages=messages,
+                )
+
+                # Same rate-limit-driven pause as before, just async now.
+                await asyncio.sleep(5)
+                total_input_tokens += response.usage.input_tokens
+                total_output_tokens += response.usage.output_tokens
+
+                text_parts = [
+                    block.text for block in response.content if hasattr(block, "text")
+                ]
+                for text in text_parts:
+                    print(text)
+
+                if response.stop_reason == "end_turn":
+                    brief = "\n\n".join(text_parts)
+                    break
+
+                if response.stop_reason == "tool_use":
+                    tool_results = []
+                    for block in response.content:
+                        if block.type == "tool_use":
+                            print(f"\n[Tool call: {block.name}({json.dumps(block.input, indent=2)})]\n")
+
+                            t0 = time.time()
+                            result = await dispatch_tool(
+                                block.name, block.input, tool_routing, notion_page_id
+                            )
+                            latency_ms = int((time.time() - t0) * 1000)
+
+                            is_error = result.startswith((
+                                "Search failed:",
+                                "Drive API error:",
+                                "Auth error:",
+                                "Unexpected error:",
+                                "Read failed:",
+                                "Tool '",  # transport-level failure message
+                                "Error:",
+                            ))
+
+                            tool_calls_log.append({
+                                "turn": turn,
+                                "tool": block.name,
+                                "input": block.input,
+                                "result_preview": result[:1000],
+                                "result_length_chars": len(result),
+                                "latency_ms": latency_ms,
+                                "is_error": is_error,
+                            })
+
+                            # Circuit breaker bookkeeping: a success resets
+                            # the count, a failure increments it. We check
+                            # the threshold here rather than waiting until
+                            # the next loop iteration so the drop notice
+                            # appears right next to the failure that caused
+                            # it, not detached from context.
+                            if is_error:
+                                tool_failure_counts[block.name] = (
+                                    tool_failure_counts.get(block.name, 0) + 1
+                                )
+                                if (
+                                    tool_failure_counts[block.name] >= MAX_CONSECUTIVE_TOOL_FAILURES
+                                    and block.name not in dropped_tools
+                                ):
+                                    dropped_tools.add(block.name)
+                                    print(
+                                        f"\n[Circuit breaker: '{block.name}' failed "
+                                        f"{tool_failure_counts[block.name]} times in a row — "
+                                        f"removing it from available tools for the rest of "
+                                        f"this run]\n"
+                                    )
+                            else:
+                                tool_failure_counts[block.name] = 0
+
+                            tool_results.append({
+                                "type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": result,
+                            })
+
+                    messages.append({"role": "assistant", "content": response.content})
+                    messages.append({"role": "user", "content": tool_results})
+                else:
+                    print(f"Unexpected stop reason: {response.stop_reason}")
+                    break
+
+            print(f"\nTotal tokens — input: {total_input_tokens}, output: {total_output_tokens}")
+
+            if root_span is not None:
+                root_span.set_attribute("research.total_input_tokens", total_input_tokens)
+                root_span.set_attribute("research.total_output_tokens", total_output_tokens)
+                root_span.set_attribute("research.tool_call_count", len(tool_calls_log))
+
+            if lf_trace is not None:
+                lf_trace.end()
+                lf.flush()
+
+        # AsyncExitStack closes here: both MCP subprocesses get torn down
+        # together, cleanly, whether the loop above succeeded or raised.
 
     # --- Write run artifact -------------------------------------------------
-    # Written outside the span context so the completed_at timestamp reflects
-    # the true end of the run including span teardown.
 
     completed_at = datetime.now(timezone.utc).isoformat()
 
@@ -359,6 +518,7 @@ def run_research(
             "output": total_output_tokens,
         },
         "tool_calls": tool_calls_log,
+        "dropped_tools": sorted(dropped_tools),
         "brief": brief,
     }
 
@@ -410,10 +570,15 @@ def main():
 
     args = parser.parse_args()
 
-    for key in ["ANTHROPIC_API_KEY", "TAVILY_API_KEY"]:
-        if not os.environ.get(key):
-            print(f"Error: {key} is not set. Add it to your .env file.")
-            sys.exit(1)
+    # TAVILY_API_KEY is intentionally not checked here. It's read and
+    # validated by search-server's own .env lookup, not by this file. If
+    # it's missing, the failure surfaces as a clear tool-result error
+    # during the run, not as an early sys.exit — that's the cost of
+    # search-server owning its own dependency instead of this client
+    # knowing about it.
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        print("Error: ANTHROPIC_API_KEY is not set. Add it to your .env file.")
+        sys.exit(1)
 
     notion_page = args.notion_page or os.environ.get("NOTION_PAGE_ID")
 
@@ -421,8 +586,6 @@ def main():
         print("Error: NOTION_API_KEY is not set but a Notion page ID was provided.")
         sys.exit(1)
 
-    # Initialize observability before doing anything else so the Anthropic
-    # auto-instrumentor is patched before the first API call.
     try_init_observability()
 
     questions = load_questions(args.questions)
@@ -439,14 +602,17 @@ def main():
     print(f"Model     : {model}")
     print()
 
-    run_dir = run_research(
+    # run_research is now async — this is the one place sync code calls
+    # into the async world, via asyncio.run(). Everything below this
+    # point in the call stack is async.
+    run_dir = asyncio.run(run_research(
         questions=questions,
         topic=args.topic,
         context_doc_id=args.context_doc,
         notion_page_id=notion_page,
         model=model,
         question_template=question_template,
-    )
+    ))
 
     if not args.skip_evals:
         from evals.run_evals import run_evals
