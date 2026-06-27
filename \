@@ -1,0 +1,30 @@
+# On branch main
+# Your branch is up to date with 'origin/main'.
+#
+# Changes to be committed:
+#	new file:   mcp-servers/drive-server/server.py
+#	new file:   mcp-servers/search-server/server.py
+#	modified:   requirements.txt
+#	modified:   research.py
+#	deleted:    tools/drive.py
+#	deleted:    tools/search.py
+#
+Convert search and Drive tools to MCP servers
+
+Search and Drive tools now run as real MCP servers under
+mcp-servers/, communicating with research.py over stdio.
+research.py is now an MCP client. It discovers tools at
+startup instead of importing hardcoded tool definitions.
+
+Notion stays a direct SDK call, not converted to MCP.
+
+Added a circuit breaker. A tool that fails 3 times in a row
+gets dropped from the run instead of being retried forever.
+
+Added transport-level error handling. A crashed MCP server
+no longer crashes the whole research run.
+
+Removed tools/search.py and tools/drive.py. Their logic now
+lives entirely inside the corresponding MCP server.
+
+Updated README and requirements.txt to match.
