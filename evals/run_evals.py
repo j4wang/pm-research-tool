@@ -74,6 +74,7 @@ def _run_eval(client: anthropic.Anthropic, prompt: str) -> dict:
     response = client.messages.create(
         model=EVAL_MODEL,
         max_tokens=1000,
+        temperature=0,
         messages=[{"role": "user", "content": prompt}],
     )
     text = response.content[0].text.strip()
@@ -87,7 +88,11 @@ def _run_eval(client: anthropic.Anthropic, prompt: str) -> dict:
     return json.loads(text)
 
 
-def run_evals(run_dir: Path, skip_langfuse: bool = False) -> EvalScores:
+def run_evals(
+    run_dir: Path,
+    skip_langfuse: bool = False,
+    append_scores: bool = False,
+) -> EvalScores:
     """
     Run the eval suite against a completed research run.
 
@@ -109,16 +114,38 @@ def run_evals(run_dir: Path, skip_langfuse: bool = False) -> EvalScores:
     langfuse_trace_id = result.get("langfuse_trace_id")
 
     # Build a source material string for the groundedness eval.
-    # We only include tool calls that actually retrieved content (not Notion writes).
-    retrieval_tools = {"web_search", "drive_read_document", "drive_list_files"}
+    #
+    # We exclude rather than include. The MCP servers are discovered at
+    # runtime, so a hardcoded include-list drifts out of sync the moment a
+    # server's tool names change. notion_create_page is the one write-only
+    # tool with no retrieved content, so it's the thing we name explicitly.
+    #
+    # We also drop errored calls. A failed tool returns error text, not
+    # source material, and the judge has no way to tell those apart from
+    # real content unless we filter it out here.
+    write_only_tools = {"notion_create_page"}
+    excluded_error_count = 0
     source_parts = []
     for tc in tool_calls:
-        if tc["tool"] in retrieval_tools:
-            source_parts.append(
-                f"[{tc['tool']}] input={json.dumps(tc['input'])} "
-                f"preview={tc['result_preview']}"
+        if tc["tool"] in write_only_tools:
+            continue
+        if tc.get("is_error"):
+            excluded_error_count += 1
+            continue
+        source_parts.append(
+            f"[{tc['tool']}] input={json.dumps(tc['input'])} "
+            f"preview={tc['result_preview']}"
+        )
+
+    if source_parts:
+        source_material = "\n\n".join(source_parts)
+        if excluded_error_count:
+            source_material += (
+                f"\n\n(Note: {excluded_error_count} tool call(s) failed during this "
+                f"run and are excluded from the source material above.)"
             )
-    source_material = "\n\n".join(source_parts) if source_parts else "(no retrieval results recorded)"
+    else:
+        source_material = "(no retrieval results recorded)"
 
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
@@ -132,7 +159,6 @@ def run_evals(run_dir: Path, skip_langfuse: bool = False) -> EvalScores:
         	.replace("{brief}", brief),
     )
     print(f"  Coverage         : {coverage_result['score']}/5")
-    print("COVERAGE FULL:", json.dumps(coverage_result, indent=2))
 
     # --- Groundedness -------------------------------------------------------
     groundedness_result = _run_eval(
@@ -142,7 +168,6 @@ def run_evals(run_dir: Path, skip_langfuse: bool = False) -> EvalScores:
         	.replace("{brief}", brief),
     )
     print(f"  Groundedness     : {groundedness_result['score']}/5")
-    print("GROUNDEDNESS FULL:", json.dumps(groundedness_result, indent=2))
 
     # --- Synthesis quality --------------------------------------------------
     synthesis_result = _run_eval(
@@ -151,7 +176,6 @@ def run_evals(run_dir: Path, skip_langfuse: bool = False) -> EvalScores:
         	.replace("{brief}", brief),
     )
     print(f"  Synthesis quality: {synthesis_result['score']}/5")
-    print("SYNTHESIS FULL:", json.dumps(synthesis_result, indent=2))
 
     scores = EvalScores(
         question_coverage=coverage_result["score"],
@@ -162,6 +186,12 @@ def run_evals(run_dir: Path, skip_langfuse: bool = False) -> EvalScores:
         synthesis_quality_reasoning=synthesis_result.get("reasoning", ""),
     )
 
+    # --- Write scores into the run dir --------------------------------------
+    # Always happens, independent of Langfuse. This is the durable,
+    # reviewable record: a committed file a reviewer can open without a
+    # Langfuse login.
+    _write_scores_file(run_dir, scores, overwrite=not append_scores)
+
     # --- Post to Langfuse ---------------------------------------------------
     if not skip_langfuse and langfuse_trace_id:
         _post_langfuse_scores(scores, langfuse_trace_id)
@@ -169,6 +199,71 @@ def run_evals(run_dir: Path, skip_langfuse: bool = False) -> EvalScores:
         print("  Langfuse: no trace ID in artifact — scores not posted")
 
     return scores
+
+
+def _write_scores_file(
+    run_dir: Path,
+    scores: EvalScores,
+    overwrite: bool = True,
+) -> Path:
+    """
+    Write eval scores to run_dir/eval_scores.json.
+
+    Deliberately a separate file from result.json. result.json is the
+    research artifact written by research.py. Eval scores come from a
+    later, separate scoring pass. Keeping them apart means re-scoring a
+    run never rewrites the original research record, so provenance stays
+    clean and you can always tell what the run produced versus what a
+    later eval pass added.
+
+    The eval model and a timestamp are recorded alongside the scores. A
+    baseline captured on one eval model and a comparison run on another
+    would otherwise look identical in the file and mislead you. This is
+    the same model-confounding trap the ANTHROPIC_MODEL override creates
+    on the research side.
+
+    When overwrite is False and a scores file already exists, the new
+    scores are appended to a history list instead of replacing the file.
+    That's what lets repeated eval passes against one run dir accumulate
+    rather than clobber each other.
+    """
+    from datetime import datetime, timezone
+
+    scores_path = run_dir / "eval_scores.json"
+
+    entry = {
+        "eval_model": EVAL_MODEL,
+        "scored_at": datetime.now(timezone.utc).isoformat(),
+        "scores": {
+            "question_coverage": scores.question_coverage,
+            "groundedness": scores.groundedness,
+            "synthesis_quality": scores.synthesis_quality,
+        },
+        "reasoning": {
+            "question_coverage": scores.question_coverage_reasoning,
+            "groundedness": scores.groundedness_reasoning,
+            "synthesis_quality": scores.synthesis_quality_reasoning,
+        },
+    }
+
+    if overwrite or not scores_path.exists():
+        payload = {"latest": entry, "history": [entry]}
+        scores_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    else:
+        existing = json.loads(scores_path.read_text(encoding="utf-8"))
+        history = existing.get("history", [])
+        history.append(entry)
+        payload = {"latest": entry, "history": history}
+        scores_path.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    print(f"  Scores written to {scores_path}")
+    return scores_path
 
 
 def _post_langfuse_scores(scores: EvalScores, trace_id: str) -> None:
@@ -223,6 +318,15 @@ def main():
         action="store_true",
         help="Skip posting scores to Langfuse (useful for local testing).",
     )
+    parser.add_argument(
+        "--append-scores",
+        action="store_true",
+        help=(
+            "Append to eval_scores.json instead of overwriting it. Use this "
+            "for repeated eval passes against one run dir (e.g. a variance "
+            "check) when you want each pass kept rather than clobbered."
+        ),
+    )
     args = parser.parse_args()
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
@@ -230,7 +334,11 @@ def main():
         sys.exit(1)
 
     run_dir = Path(args.run_dir)
-    scores = run_evals(run_dir, skip_langfuse=args.skip_langfuse)
+    scores = run_evals(
+        run_dir,
+        skip_langfuse=args.skip_langfuse,
+        append_scores=args.append_scores,
+    )
 
     print("\nEval summary:")
     print(f"  Question coverage : {scores.question_coverage}/5")
