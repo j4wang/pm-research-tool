@@ -85,44 +85,59 @@ def _run_tavily_search(query: str, max_results: int) -> dict:
 async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
     logger.info("call_tool() invoked: name=%s arguments=%s", name, arguments)
 
-    if name != "web_search":
-        raise ValueError(f"Unknown tool: {name}")
-
-    if tavily_client is None:
-        return [
-            types.TextContent(
-                type="text",
-                text=(
-                    "Search failed: TAVILY_API_KEY is not set. "
-                    f"Checked for .env at {ENV_PATH}. Set the key and "
-                    "restart the server."
-                ),
-            )
-        ]
-
-    query = arguments.get("query", "").strip()
-    max_results = arguments.get("max_results", 5)
-
-    if not query:
-        return [
-            types.TextContent(
-                type="text",
-                text="Search failed: query argument was empty.",
-            )
-        ]
-
     try:
+        if name != "web_search":
+            # Moved inside the try block. Every other failure path in
+            # this file (and in drive-server) returns a TextContent
+            # instead of raising, so the client always gets a readable
+            # result. This branch used to be the one exception: it
+            # raised outside any try/except, which meant an unknown
+            # tool name would crash the handler instead of producing
+            # a clean error, and it never got logged like every other
+            # failure here does.
+            logger.error("Unknown tool requested: %s", name)
+            return [
+                types.TextContent(
+                    type="text",
+                    text=f"Error: unknown tool '{name}'. This server only exposes 'web_search'.",
+                )
+            ]
+
+        if tavily_client is None:
+            return [
+                types.TextContent(
+                    type="text",
+                    text=(
+                        "Search failed: TAVILY_API_KEY is not set. "
+                        f"Checked for .env at {ENV_PATH}. Set the key and "
+                        "restart the server."
+                    ),
+                )
+            ]
+
+        query = arguments.get("query", "").strip()
+        max_results = arguments.get("max_results", 5)
+
+        if not query:
+            return [
+                types.TextContent(
+                    type="text",
+                    text="Search failed: query argument was empty.",
+                )
+            ]
+
         # Tavily's client is synchronous. Run it in a thread so it
         # doesn't block the event loop while waiting on the HTTP call.
         response = await asyncio.to_thread(
             _run_tavily_search, query, max_results
         )
+
     except Exception as exc:
         # Catch broadly here on purpose. Whatever Tavily throws
         # (timeout, rate limit, auth error, network failure), the
         # client should get a readable explanation back as a tool
         # result, not an unhandled exception killing the call.
-        logger.exception("Tavily search failed for query=%r", query)
+        logger.exception("Tavily search failed for query=%r", arguments.get("query"))
         return [
             types.TextContent(
                 type="text",
