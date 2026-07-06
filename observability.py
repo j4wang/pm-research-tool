@@ -156,8 +156,17 @@ def get_system_prompt(fallback: str) -> tuple[str, str]:
 
     Returns:
         (prompt_text, version_label)
-        where version_label is e.g. "pm-research-system-prompt@3" or
-        "hardcoded" if Langfuse is unavailable.
+
+        version_label is one of:
+          "pm-research-system-prompt@3"  normal case, the fetched version
+          "hardcoded"                    Langfuse not initialized at all
+          "hardcoded-lookup-failed"      lookup errored (auth, hard network)
+          "hardcoded-register-failed"    prompt was missing and create failed
+
+        The distinct failure labels matter: they get written into the run
+        artifact as prompt_version, so a run scored against a fallback
+        prompt is never silently recorded as if it ran a real registered
+        version.
     """
     try:
         lf = get_langfuse()
@@ -166,24 +175,71 @@ def get_system_prompt(fallback: str) -> tuple[str, str]:
 
     prompt_name = "pm-research-system-prompt"
 
+    # We need to tell two failures apart:
+    #   1. The prompt genuinely doesn't exist yet. This raises
+    #      LangfuseNotFoundError (a 404). Registering a baseline is the
+    #      right move here.
+    #   2. Anything else — auth failure, or a hard network failure with
+    #      no cached copy to fall back on. Registering a prompt here is
+    #      wrong. It can create a junk version that doesn't correspond to
+    #      any real prompt edit, and it means we'd return a made-up
+    #      version label that later gets written into the run artifact as
+    #      fact.
+    #
+    # The old code caught both cases with one bare `except` and treated
+    # everything as case 1. That's the bug this fixes.
+    #
+    # LangfuseNotFoundError has moved around across SDK versions, so we
+    # resolve it by name at runtime rather than importing it at module
+    # top (a wrong import path there would break this whole module on
+    # load). If we can't find it, NotFoundDummy is a class that never
+    # matches, so every error falls through to the safe branch.
     try:
-        # get_prompt() fetches the version currently labeled "production".
-        # If no such prompt exists, it raises an exception.
+        from langfuse import errors as _lf_errors
+        NotFoundError = getattr(_lf_errors, "LangfuseNotFoundError", None)
+    except Exception:
+        NotFoundError = None
+
+    if NotFoundError is None:
+        class NotFoundDummy(Exception):
+            pass
+        NotFoundError = NotFoundDummy
+
+    try:
+        # get_prompt() returns the version currently labeled "production".
+        # The SDK caches locally and only raises when there's no cached
+        # copy AND the network call fails, so a transient blip usually
+        # returns a stale cached prompt rather than reaching here.
         prompt_obj = lf.get_prompt(prompt_name)
         return prompt_obj.prompt, f"{prompt_name}@{prompt_obj.version}"
 
-    except Exception:
-        # Prompt doesn't exist yet — register the current hardcoded version
-        # so future iterations are tracked from this baseline.
+    except NotFoundError:
+        # Case 1: the prompt really doesn't exist. Register the current
+        # hardcoded version as the baseline so future edits are tracked.
+        # Read the version back off the created object instead of
+        # assuming @1 — if this name existed before and lost its labels,
+        # the new version could be higher than 1.
         try:
-            lf.create_prompt(
+            created = lf.create_prompt(
                 name=prompt_name,
                 prompt=fallback,
                 labels=["production"],
             )
-            logger.info("Registered baseline prompt in Langfuse: %s", prompt_name)
+            version = getattr(created, "version", None)
+            label = f"{prompt_name}@{version}" if version is not None else f"{prompt_name}@unknown"
+            logger.info("Registered baseline prompt in Langfuse: %s", label)
+            return fallback, label
         except Exception as create_exc:
-            logger.warning(
-                "Could not register prompt in Langfuse: %s", create_exc
-            )
-        return fallback, f"{prompt_name}@1"
+            logger.warning("Could not register prompt in Langfuse: %s", create_exc)
+            return fallback, "hardcoded-register-failed"
+
+    except Exception as lookup_exc:
+        # Case 2: lookup failed for a reason other than not-found. Do NOT
+        # create a prompt. Return the fallback text with a label that
+        # says plainly the lookup failed, so the run artifact records the
+        # truth rather than a fabricated version.
+        logger.warning(
+            "Langfuse prompt lookup failed (not creating a new version): %s",
+            lookup_exc,
+        )
+        return fallback, "hardcoded-lookup-failed"
