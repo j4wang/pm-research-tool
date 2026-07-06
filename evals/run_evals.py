@@ -374,6 +374,18 @@ def main():
         print("Error: ANTHROPIC_API_KEY is not set.")
         sys.exit(1)
 
+    # Initialize observability so eval prompts resolve from Langfuse and
+    # scores can post. research.py does this in its own main(); the eval
+    # CLI is a separate entry point and has to do it too, or every
+    # standalone run silently falls back to on-disk eval prompts and logs
+    # "hardcoded" version labels. Skipped when the user asked to skip
+    # Langfuse, since initializing would still perform Langfuse writes
+    # (prompt registration). try_init_observability degrades cleanly if
+    # the Langfuse keys aren't set, so this is safe either way.
+    if not args.skip_langfuse:
+        from observability import try_init_observability
+        try_init_observability()
+
     run_dir = Path(args.run_dir)
     scores = run_evals(
         run_dir,
