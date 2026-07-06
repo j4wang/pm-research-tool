@@ -145,35 +145,29 @@ def get_langfuse() -> Langfuse:
 # Prompt versioning
 # ---------------------------------------------------------------------------
 
-def get_system_prompt(fallback: str) -> tuple[str, str]:
+def _resolve_versioned_prompt(prompt_name: str, fallback: str) -> tuple[str, str]:
     """
-    Fetch the active system prompt from Langfuse if available.
-
-    On first use, the fallback (hardcoded) prompt is registered in Langfuse
-    under the name "pm-research-system-prompt". Subsequent prompt edits made
-    in the Langfuse UI create new versions, and this function always returns
-    the version labeled "production".
+    Fetch a named prompt from Langfuse, registering it from the fallback if
+    it doesn't exist yet. Shared by get_system_prompt and get_eval_prompt so
+    the not-found handling lives in exactly one place.
 
     Returns:
         (prompt_text, version_label)
 
         version_label is one of:
-          "pm-research-system-prompt@3"  normal case, the fetched version
+          "<name>@3"                     normal case, the fetched version
           "hardcoded"                    Langfuse not initialized at all
           "hardcoded-lookup-failed"      lookup errored (auth, hard network)
           "hardcoded-register-failed"    prompt was missing and create failed
 
-        The distinct failure labels matter: they get written into the run
-        artifact as prompt_version, so a run scored against a fallback
-        prompt is never silently recorded as if it ran a real registered
-        version.
+        The distinct failure labels matter: they get written into artifacts,
+        so a run that fell back to the hardcoded prompt is never silently
+        recorded as if it ran a real registered version.
     """
     try:
         lf = get_langfuse()
     except RuntimeError:
         return fallback, "hardcoded"
-
-    prompt_name = "pm-research-system-prompt"
 
     # We need to tell two failures apart:
     #   1. The prompt genuinely doesn't exist yet. This raises
@@ -181,19 +175,15 @@ def get_system_prompt(fallback: str) -> tuple[str, str]:
     #      right move here.
     #   2. Anything else — auth failure, or a hard network failure with
     #      no cached copy to fall back on. Registering a prompt here is
-    #      wrong. It can create a junk version that doesn't correspond to
-    #      any real prompt edit, and it means we'd return a made-up
-    #      version label that later gets written into the run artifact as
-    #      fact.
-    #
-    # The old code caught both cases with one bare `except` and treated
-    # everything as case 1. That's the bug this fixes.
+    #      wrong. It can create a junk version that maps to no real prompt
+    #      edit, and it means returning a made-up version label that later
+    #      gets written into an artifact as fact.
     #
     # LangfuseNotFoundError has moved around across SDK versions, so we
-    # resolve it by name at runtime rather than importing it at module
-    # top (a wrong import path there would break this whole module on
-    # load). If we can't find it, NotFoundDummy is a class that never
-    # matches, so every error falls through to the safe branch.
+    # resolve it by name at runtime rather than importing it at module top
+    # (a wrong import path there would break this whole module on load). If
+    # we can't find it, NotFoundDummy never matches, so every error falls
+    # through to the safe branch.
     try:
         from langfuse import errors as _lf_errors
         NotFoundError = getattr(_lf_errors, "LangfuseNotFoundError", None)
@@ -207,18 +197,18 @@ def get_system_prompt(fallback: str) -> tuple[str, str]:
 
     try:
         # get_prompt() returns the version currently labeled "production".
-        # The SDK caches locally and only raises when there's no cached
-        # copy AND the network call fails, so a transient blip usually
-        # returns a stale cached prompt rather than reaching here.
+        # The SDK caches locally and only raises when there's no cached copy
+        # AND the network call fails, so a transient blip usually returns a
+        # stale cached prompt rather than reaching here.
         prompt_obj = lf.get_prompt(prompt_name)
         return prompt_obj.prompt, f"{prompt_name}@{prompt_obj.version}"
 
     except NotFoundError:
         # Case 1: the prompt really doesn't exist. Register the current
         # hardcoded version as the baseline so future edits are tracked.
-        # Read the version back off the created object instead of
-        # assuming @1 — if this name existed before and lost its labels,
-        # the new version could be higher than 1.
+        # Read the version back off the created object instead of assuming
+        # @1 — if this name existed before and lost its labels, the new
+        # version could be higher than 1.
         try:
             created = lf.create_prompt(
                 name=prompt_name,
@@ -235,11 +225,46 @@ def get_system_prompt(fallback: str) -> tuple[str, str]:
 
     except Exception as lookup_exc:
         # Case 2: lookup failed for a reason other than not-found. Do NOT
-        # create a prompt. Return the fallback text with a label that
-        # says plainly the lookup failed, so the run artifact records the
-        # truth rather than a fabricated version.
+        # create a prompt. Return the fallback text with a label that says
+        # plainly the lookup failed, so the artifact records the truth
+        # rather than a fabricated version.
         logger.warning(
-            "Langfuse prompt lookup failed (not creating a new version): %s",
+            "Langfuse prompt lookup failed for '%s' (not creating a new version): %s",
+            prompt_name,
             lookup_exc,
         )
         return fallback, "hardcoded-lookup-failed"
+
+
+def get_system_prompt(fallback: str) -> tuple[str, str]:
+    """
+    Fetch the active research system prompt from Langfuse if available.
+
+    On first use, the fallback (hardcoded) prompt is registered in Langfuse
+    under "pm-research-system-prompt". Subsequent edits in the Langfuse UI
+    create new versions, and this returns the version labeled "production".
+
+    See _resolve_versioned_prompt for the full list of returned version
+    labels, including the failure labels.
+    """
+    return _resolve_versioned_prompt("pm-research-system-prompt", fallback)
+
+
+def get_eval_prompt(eval_name: str, fallback: str) -> tuple[str, str]:
+    """
+    Fetch a versioned eval prompt from Langfuse if available.
+
+    eval_name is the short dimension name (question_coverage, groundedness,
+    synthesis_quality). It's registered under "pm-research-eval-<name>" so
+    eval prompts sit in their own namespace, distinct from the research
+    system prompt.
+
+    On first use the fallback (the text loaded from evals/prompts/<name>.md)
+    is registered as the baseline. Later edits in the Langfuse UI create new
+    versions. This is what lets a change to the grading criteria be tracked
+    alongside changes to the research prompt.
+
+    Returns (prompt_text, version_label), same shape and same failure labels
+    as get_system_prompt.
+    """
+    return _resolve_versioned_prompt(f"pm-research-eval-{eval_name}", fallback)

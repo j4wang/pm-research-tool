@@ -59,9 +59,33 @@ class EvalScores:
 # Eval execution
 # ---------------------------------------------------------------------------
 
-def _load_prompt(name: str) -> str:
+def _load_prompt_from_disk(name: str) -> str:
     """Load an eval prompt template from evals/prompts/<name>.md."""
     return (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
+
+
+def _load_prompt(name: str) -> tuple[str, str]:
+    """
+    Load an eval prompt, preferring the versioned copy in Langfuse.
+
+    The on-disk file under evals/prompts/ is always read first and passed to
+    Langfuse as the fallback. On first use that text gets registered in
+    Langfuse under "pm-research-eval-<name>", so grading-criteria changes are
+    tracked the same way the research system prompt is. If Langfuse isn't
+    available, the on-disk text is used and the version label says so.
+
+    Returns (prompt_text, version_label). The version label is recorded in
+    the scores file so a score can always be traced to the exact grading
+    criteria that produced it.
+    """
+    disk_text = _load_prompt_from_disk(name)
+    try:
+        from observability import get_eval_prompt
+        return get_eval_prompt(name, disk_text)
+    except ImportError:
+        # observability module not importable (e.g. stack not installed).
+        # Fall back to the on-disk text with an honest label.
+        return disk_text, "hardcoded"
 
 
 def _run_eval(client: anthropic.Anthropic, prompt: str) -> dict:
@@ -152,30 +176,39 @@ def run_evals(
     print("Running evals...")
 
     # --- Question coverage --------------------------------------------------
+    coverage_prompt, coverage_version = _load_prompt("question_coverage")
     coverage_result = _run_eval(
         client,
-        _load_prompt("question_coverage")
+        coverage_prompt
         	.replace("{questions}", questions)
         	.replace("{brief}", brief),
     )
     print(f"  Coverage         : {coverage_result['score']}/5")
 
     # --- Groundedness -------------------------------------------------------
+    groundedness_prompt, groundedness_version = _load_prompt("groundedness")
     groundedness_result = _run_eval(
         client,
-        _load_prompt("groundedness")
+        groundedness_prompt
         	.replace("{source_material}", source_material)
         	.replace("{brief}", brief),
     )
     print(f"  Groundedness     : {groundedness_result['score']}/5")
 
     # --- Synthesis quality --------------------------------------------------
+    synthesis_prompt, synthesis_version = _load_prompt("synthesis_quality")
     synthesis_result = _run_eval(
         client,
-        _load_prompt("synthesis_quality")
+        synthesis_prompt
         	.replace("{brief}", brief),
     )
     print(f"  Synthesis quality: {synthesis_result['score']}/5")
+
+    eval_prompt_versions = {
+        "question_coverage": coverage_version,
+        "groundedness": groundedness_version,
+        "synthesis_quality": synthesis_version,
+    }
 
     scores = EvalScores(
         question_coverage=coverage_result["score"],
@@ -190,7 +223,12 @@ def run_evals(
     # Always happens, independent of Langfuse. This is the durable,
     # reviewable record: a committed file a reviewer can open without a
     # Langfuse login.
-    _write_scores_file(run_dir, scores, overwrite=not append_scores)
+    _write_scores_file(
+        run_dir,
+        scores,
+        eval_prompt_versions=eval_prompt_versions,
+        overwrite=not append_scores,
+    )
 
     # --- Post to Langfuse ---------------------------------------------------
     if not skip_langfuse and langfuse_trace_id:
@@ -204,6 +242,7 @@ def run_evals(
 def _write_scores_file(
     run_dir: Path,
     scores: EvalScores,
+    eval_prompt_versions: dict = None,
     overwrite: bool = True,
 ) -> Path:
     """
@@ -216,11 +255,12 @@ def _write_scores_file(
     clean and you can always tell what the run produced versus what a
     later eval pass added.
 
-    The eval model and a timestamp are recorded alongside the scores. A
-    baseline captured on one eval model and a comparison run on another
-    would otherwise look identical in the file and mislead you. This is
-    the same model-confounding trap the ANTHROPIC_MODEL override creates
-    on the research side.
+    The eval model, a timestamp, and the eval prompt versions are recorded
+    alongside the scores. A score is only meaningful if you can trace it
+    back to the exact grading criteria that produced it, so a change to an
+    eval prompt is never silently mixed in with scores from the old one.
+    The model record guards the same way against the model-confounding trap
+    the ANTHROPIC_MODEL override creates on the research side.
 
     When overwrite is False and a scores file already exists, the new
     scores are appended to a history list instead of replacing the file.
@@ -234,6 +274,7 @@ def _write_scores_file(
     entry = {
         "eval_model": EVAL_MODEL,
         "scored_at": datetime.now(timezone.utc).isoformat(),
+        "eval_prompt_versions": eval_prompt_versions or {},
         "scores": {
             "question_coverage": scores.question_coverage,
             "groundedness": scores.groundedness,

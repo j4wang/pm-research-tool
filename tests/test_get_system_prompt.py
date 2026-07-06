@@ -180,3 +180,63 @@ def test_created_object_without_version_attribute(patched):
 
     assert text == FALLBACK
     assert label == f"{PROMPT_NAME}@unknown"
+
+
+# ---------------------------------------------------------------------------
+# get_eval_prompt shares the same resolver, so these confirm the eval
+# namespace and that the not-found handling carries over.
+# ---------------------------------------------------------------------------
+
+EVAL_FALLBACK = "EVAL PROMPT BODY"
+
+
+def test_eval_prompt_happy_path_namespaced(patched):
+    """Eval prompt exists. Label uses the pm-research-eval- namespace."""
+    class LF:
+        def get_prompt(self, name):
+            assert name == "pm-research-eval-groundedness"
+            return _Obj(prompt="REGISTERED EVAL TEXT", version=4)
+
+    patched(LF())
+    text, label = observability.get_eval_prompt("groundedness", EVAL_FALLBACK)
+
+    assert text == "REGISTERED EVAL TEXT"
+    assert label == "pm-research-eval-groundedness@4"
+
+
+def test_eval_prompt_not_found_registers_under_namespace(patched):
+    """Missing eval prompt registers under the namespaced name."""
+    created = []
+
+    class LF:
+        def get_prompt(self, name):
+            raise _NotFoundError("404 not found")
+        def create_prompt(self, **kwargs):
+            created.append(kwargs)
+            return _Obj(version=1)
+
+    patched(LF())
+    text, label = observability.get_eval_prompt("synthesis_quality", EVAL_FALLBACK)
+
+    assert text == EVAL_FALLBACK
+    assert label == "pm-research-eval-synthesis_quality@1"
+    assert created[0]["name"] == "pm-research-eval-synthesis_quality"
+
+
+def test_eval_prompt_lookup_failure_does_not_create(patched):
+    """A non-not-found failure on an eval prompt must not create one."""
+    created = []
+
+    class LF:
+        def get_prompt(self, name):
+            raise RuntimeError("401 unauthorized")
+        def create_prompt(self, **kwargs):
+            created.append(kwargs)
+            return _Obj(version=9)
+
+    patched(LF())
+    text, label = observability.get_eval_prompt("question_coverage", EVAL_FALLBACK)
+
+    assert text == EVAL_FALLBACK
+    assert label == "hardcoded-lookup-failed"
+    assert created == []
