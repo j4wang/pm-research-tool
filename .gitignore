@@ -28,6 +28,8 @@ dist/
 .vscode/
 .idea/
 
-# Output files
-output/
+# Run artifacts
 runs/
+
+# Scratch eval output
+eval_run*.txt
