@@ -170,30 +170,23 @@ def _resolve_versioned_prompt(prompt_name: str, fallback: str) -> tuple[str, str
         return fallback, "hardcoded"
 
     # We need to tell two failures apart:
-    #   1. The prompt genuinely doesn't exist yet. This raises
-    #      LangfuseNotFoundError (a 404). Registering a baseline is the
-    #      right move here.
-    #   2. Anything else — auth failure, or a hard network failure with
-    #      no cached copy to fall back on. Registering a prompt here is
-    #      wrong. It can create a junk version that maps to no real prompt
-    #      edit, and it means returning a made-up version label that later
-    #      gets written into an artifact as fact.
+    #   1. The prompt genuinely doesn't exist yet. This is a 404.
+    #      Registering a baseline is the right move here.
+    #   2. Anything else, an auth failure or a hard network failure with no
+    #      cached copy to fall back on. Registering a prompt here is wrong.
+    #      It can create a junk version that maps to no real prompt edit,
+    #      and it means returning a made-up version label that later gets
+    #      written into an artifact as fact.
     #
-    # LangfuseNotFoundError has moved around across SDK versions, so we
-    # resolve it by name at runtime rather than importing it at module top
-    # (a wrong import path there would break this whole module on load). If
-    # we can't find it, NotFoundDummy never matches, so every error falls
-    # through to the safe branch.
-    try:
-        from langfuse import errors as _lf_errors
-        NotFoundError = getattr(_lf_errors, "LangfuseNotFoundError", None)
-    except Exception:
-        NotFoundError = None
-
-    if NotFoundError is None:
-        class NotFoundDummy(Exception):
-            pass
-        NotFoundError = NotFoundDummy
+    # We key on the HTTP status code, not the exception class. The class
+    # has already moved once across SDK versions (it's NotFoundError in
+    # langfuse.api.commons.errors.not_found_error, not LangfuseNotFoundError
+    # in langfuse.errors as older code assumed), and its base class Error is
+    # shared by every API error, so matching by class is either wrong or too
+    # broad. A 404 is the actual wire signal for not-found and it survives
+    # the class being relocated again.
+    def _is_not_found(exc) -> bool:
+        return getattr(exc, "status_code", None) == 404
 
     try:
         # get_prompt() returns the version currently labeled "production".
@@ -203,27 +196,27 @@ def _resolve_versioned_prompt(prompt_name: str, fallback: str) -> tuple[str, str
         prompt_obj = lf.get_prompt(prompt_name)
         return prompt_obj.prompt, f"{prompt_name}@{prompt_obj.version}"
 
-    except NotFoundError:
-        # Case 1: the prompt really doesn't exist. Register the current
-        # hardcoded version as the baseline so future edits are tracked.
-        # Read the version back off the created object instead of assuming
-        # @1 — if this name existed before and lost its labels, the new
-        # version could be higher than 1.
-        try:
-            created = lf.create_prompt(
-                name=prompt_name,
-                prompt=fallback,
-                labels=["production"],
-            )
-            version = getattr(created, "version", None)
-            label = f"{prompt_name}@{version}" if version is not None else f"{prompt_name}@unknown"
-            logger.info("Registered baseline prompt in Langfuse: %s", label)
-            return fallback, label
-        except Exception as create_exc:
-            logger.warning("Could not register prompt in Langfuse: %s", create_exc)
-            return fallback, "hardcoded-register-failed"
+    except Exception as exc:
+        if _is_not_found(exc):
+            # Case 1: the prompt really doesn't exist. Register the current
+            # hardcoded version as the baseline so future edits are tracked.
+            # Read the version back off the created object instead of
+            # assuming @1, since a name that existed before and lost its
+            # labels could come back at a higher version.
+            try:
+                created = lf.create_prompt(
+                    name=prompt_name,
+                    prompt=fallback,
+                    labels=["production"],
+                )
+                version = getattr(created, "version", None)
+                label = f"{prompt_name}@{version}" if version is not None else f"{prompt_name}@unknown"
+                logger.info("Registered baseline prompt in Langfuse: %s", label)
+                return fallback, label
+            except Exception as create_exc:
+                logger.warning("Could not register prompt in Langfuse: %s", create_exc)
+                return fallback, "hardcoded-register-failed"
 
-    except Exception as lookup_exc:
         # Case 2: lookup failed for a reason other than not-found. Do NOT
         # create a prompt. Return the fallback text with a label that says
         # plainly the lookup failed, so the artifact records the truth
@@ -231,7 +224,7 @@ def _resolve_versioned_prompt(prompt_name: str, fallback: str) -> tuple[str, str
         logger.warning(
             "Langfuse prompt lookup failed for '%s' (not creating a new version): %s",
             prompt_name,
-            lookup_exc,
+            exc,
         )
         return fallback, "hardcoded-lookup-failed"
 

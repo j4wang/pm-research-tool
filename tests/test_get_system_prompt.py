@@ -46,8 +46,23 @@ class _Obj:
 
 
 class _NotFoundError(Exception):
-    """Stand-in for LangfuseNotFoundError."""
-    pass
+    """
+    Stand-in for the SDK's not-found error. The real code keys on the
+    status_code attribute (404), not the class, so this carries one.
+    """
+    def __init__(self, message="not found", status_code=404):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class _ApiError(Exception):
+    """
+    Stand-in for a non-not-found API error (e.g. auth). Carries a non-404
+    status_code so the code routes it to the lookup-failed branch.
+    """
+    def __init__(self, message="api error", status_code=401):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 @pytest.fixture
@@ -57,16 +72,8 @@ def patched(monkeypatch):
     Langfuse client and control which branch fires.
 
     Returns a helper that installs a given fake client (or a RuntimeError
-    to simulate 'Langfuse not initialized') and returns a record of
-    whether create_prompt was called.
+    to simulate 'Langfuse not initialized').
     """
-    # Make the runtime error-class resolution find our stand-in, so the
-    # except NotFoundError branch is reachable in tests without the real
-    # SDK's exception class.
-    fake_errors = types.ModuleType("langfuse.errors")
-    fake_errors.LangfuseNotFoundError = _NotFoundError
-    monkeypatch.setitem(sys.modules, "langfuse.errors", fake_errors)
-
     def install(lf_client_or_exc):
         if isinstance(lf_client_or_exc, Exception):
             def _get_langfuse():
@@ -141,7 +148,7 @@ def test_lookup_failure_does_not_create_prompt(patched):
 
     class LF:
         def get_prompt(self, name):
-            raise RuntimeError("401 unauthorized")
+            raise _ApiError("401 unauthorized", status_code=401)
         def create_prompt(self, **kwargs):
             created_calls.append(kwargs)
             return _Obj(version=99)
@@ -229,7 +236,7 @@ def test_eval_prompt_lookup_failure_does_not_create(patched):
 
     class LF:
         def get_prompt(self, name):
-            raise RuntimeError("401 unauthorized")
+            raise _ApiError("401 unauthorized", status_code=401)
         def create_prompt(self, **kwargs):
             created.append(kwargs)
             return _Obj(version=9)
