@@ -1,0 +1,42 @@
+{
+  "latest": {
+    "eval_model": "claude-haiku-4-5-20251001",
+    "scored_at": "2026-07-07T03:06:38.806991+00:00",
+    "eval_prompt_versions": {
+      "question_coverage": "pm-research-eval-question_coverage@1",
+      "groundedness": "pm-research-eval-groundedness@1",
+      "synthesis_quality": "pm-research-eval-synthesis_quality@1"
+    },
+    "scores": {
+      "question_coverage": 2,
+      "groundedness": 2,
+      "synthesis_quality": 4
+    },
+    "reasoning": {
+      "question_coverage": "The brief provides a high-level competitive positioning snapshot but lacks the depth and specificity required to fully answer the research questions. While it touches on GTM channels, product moves, and strategic positioning, it provides minimal evidence on sales cycle length, buyer vs. user dynamics, headcount signals, and explicit competitive positioning statements. The brief reads more as a market landscape summary than a detailed competitive intelligence document, with most answers lacking supporting data, timelines, or substantive detail.",
+      "groundedness": "While the brief contains some claims traceable to source material (Pagaya's $9B+ 2024 volume, LendingClub's rebrand to Happen Bank, Avant's 2M customers, Upstart's auto lending expansion, LendingClub's Tally acquisition), it makes several significant assertions that lack grounding in the retrieved sources. Most critically, the claim that 'top 3 partners = 63% of revenue' for Upstart appears entirely unsupported—no source material provides this specific concentration metric. The characterization of Pagaya's $500M Castlelake auto forward-flow as a 'key recent move' is not found in the retrieved previews. The brief's core strategic framing (consumer marketplaces vs. B2B infrastructure split, LendingClub's 'third path' positioning, specific GTM motions for each competitor, and the 'FICO gap' narrative for Upstart) represents synthesis and inference rather than direct claims from sources. The 'Top 5 Gaps & Opportunities' section is entirely strategic analysis with no direct source support. While the brief demonstrates knowledge of the competitive landscape, it goes substantially beyond what the retrieved material explicitly states, particularly regarding Upstart's vulnerabilities and the specific strategic positioning of competitors.",
+      "synthesis_quality": "The brief demonstrates strong synthesis by identifying cross-competitor patterns (the consumer vs. B2B infrastructure split, LendingClub's third path) and drawing actionable conclusions that require combining insights across multiple competitors. The executive summary leads with a structural insight about market segmentation rather than listing findings. The opportunities section explicitly contrasts Upstart's position against competitors (e.g., 'capture Pagaya's bank wedge,' 'compete with Avant in the FICO 580–680 band,' 'exploit LendingClub's rebrand window'), showing interpretation of competitive dynamics rather than isolated summaries. However, the brief stops short of highest-level synthesis by not deeply exploring tensions between these strategies (e.g., whether white-label infrastructure conflicts with D2C brand-building, or how partner concentration risk constrains execution of diversification plays). The competitor table, while well-structured, reads somewhat as organized summarization rather than revealing deeper patterns about why these GTM choices exist or how they're likely to evolve."
+    }
+  },
+  "history": [
+    {
+      "eval_model": "claude-haiku-4-5-20251001",
+      "scored_at": "2026-07-07T03:06:38.806991+00:00",
+      "eval_prompt_versions": {
+        "question_coverage": "pm-research-eval-question_coverage@1",
+        "groundedness": "pm-research-eval-groundedness@1",
+        "synthesis_quality": "pm-research-eval-synthesis_quality@1"
+      },
+      "scores": {
+        "question_coverage": 2,
+        "groundedness": 2,
+        "synthesis_quality": 4
+      },
+      "reasoning": {
+        "question_coverage": "The brief provides a high-level competitive positioning snapshot but lacks the depth and specificity required to fully answer the research questions. While it touches on GTM channels, product moves, and strategic positioning, it provides minimal evidence on sales cycle length, buyer vs. user dynamics, headcount signals, and explicit competitive positioning statements. The brief reads more as a market landscape summary than a detailed competitive intelligence document, with most answers lacking supporting data, timelines, or substantive detail.",
+        "groundedness": "While the brief contains some claims traceable to source material (Pagaya's $9B+ 2024 volume, LendingClub's rebrand to Happen Bank, Avant's 2M customers, Upstart's auto lending expansion, LendingClub's Tally acquisition), it makes several significant assertions that lack grounding in the retrieved sources. Most critically, the claim that 'top 3 partners = 63% of revenue' for Upstart appears entirely unsupported—no source material provides this specific concentration metric. The characterization of Pagaya's $500M Castlelake auto forward-flow as a 'key recent move' is not found in the retrieved previews. The brief's core strategic framing (consumer marketplaces vs. B2B infrastructure split, LendingClub's 'third path' positioning, specific GTM motions for each competitor, and the 'FICO gap' narrative for Upstart) represents synthesis and inference rather than direct claims from sources. The 'Top 5 Gaps & Opportunities' section is entirely strategic analysis with no direct source support. While the brief demonstrates knowledge of the competitive landscape, it goes substantially beyond what the retrieved material explicitly states, particularly regarding Upstart's vulnerabilities and the specific strategic positioning of competitors.",
+        "synthesis_quality": "The brief demonstrates strong synthesis by identifying cross-competitor patterns (the consumer vs. B2B infrastructure split, LendingClub's third path) and drawing actionable conclusions that require combining insights across multiple competitors. The executive summary leads with a structural insight about market segmentation rather than listing findings. The opportunities section explicitly contrasts Upstart's position against competitors (e.g., 'capture Pagaya's bank wedge,' 'compete with Avant in the FICO 580–680 band,' 'exploit LendingClub's rebrand window'), showing interpretation of competitive dynamics rather than isolated summaries. However, the brief stops short of highest-level synthesis by not deeply exploring tensions between these strategies (e.g., whether white-label infrastructure conflicts with D2C brand-building, or how partner concentration risk constrains execution of diversification plays). The competitor table, while well-structured, reads somewhat as organized summarization rather than revealing deeper patterns about why these GTM choices exist or how they're likely to evolve."
+      }
+    }
+  ]
+}

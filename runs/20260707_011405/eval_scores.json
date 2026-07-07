@@ -1,0 +1,42 @@
+{
+  "latest": {
+    "eval_model": "claude-haiku-4-5-20251001",
+    "scored_at": "2026-07-07T01:18:12.814904+00:00",
+    "eval_prompt_versions": {
+      "question_coverage": "pm-research-eval-question_coverage@1",
+      "groundedness": "pm-research-eval-groundedness@1",
+      "synthesis_quality": "pm-research-eval-synthesis_quality@1"
+    },
+    "scores": {
+      "question_coverage": 2,
+      "groundedness": 2,
+      "synthesis_quality": 4
+    },
+    "reasoning": {
+      "question_coverage": "The brief provides strong coverage of Upstart's own leadership, funding, and traction, but it is fundamentally a single-company deep dive rather than a competitive brief. The research questions explicitly ask for competitor-by-competitor analysis (\"for each competitor\"), yet the brief contains no comparison to other players in the lending/underwriting space, no competitive positioning, and no systematic evaluation of how Upstart stacks against alternatives. While the \"Gaps & Opportunities\" section hints at competitive angles, it does not address the core requirement: structured intelligence on competing startups' founders, funding, traction, team composition, and market signals. The brief answers questions about Upstart in isolation but fails to deliver the comparative framework the research questions demand.",
+      "groundedness": "While the brief contains several well-sourced claims (founders' backgrounds, Paul Gu becoming CEO in May 2026, Q2 2025 revenue figures, 100+ lending partners, leadership transitions), it makes numerous substantive assertions that are either unsupported by or go significantly beyond the retrieved sources. Critical unsupported claims include: the specific $160M pre-IPO funding amount, the attribution of funding rounds to specific investors (First Round Capital, Khosla, Third Point) without source confirmation, the October 2025 Fortress Investment Group $320M forward-flow deal (not in sources), the 1.5M loans figure for 2025, the $54M GAAP net profit claim, the 91% automation rate, the 100% renewal rate since 2022, the claim about 'top-3 partner concentration at 85% of volume,' and the assertion that Upstart's models face 'CFPB risk' due to black-box opacity. The brief also makes strategic inferences (e.g., 'engineering a more durable capital structure,' the characterization of Paul Gu's succession as signaling 'AI model differentiation is the core strategic bet') that are reasonable synthesis but presented as fact. The sources confirm the bank charter application and UMI existence but do not support the detailed competitive gap analysis or the specific financial metrics cited.",
+      "synthesis_quality": "The brief demonstrates strong synthesis by connecting leadership succession to strategic AI differentiation, linking the Fortress capital deal to a shift away from equity fundraising toward structural durability, and synthesizing market signals (job postings, conference presence, the Macro Index) into a coherent narrative about Upstart's pivot toward bank infrastructure and B2B positioning. The gaps section explicitly contrasts Upstart's strengths (automation, partner relationships) against competitive vulnerabilities by combining insights across funding, traction, and regulatory signals. However, the brief stops short of highest-level synthesis in a few places: the leadership section could more explicitly connect insider tenure to risk/resilience trade-offs; the team composition insight (engineering-heavy, lean on sales) could be contrasted more directly against the capital markets elevation to explain a potential organizational tension; and the personal loan dependence could be tied more explicitly to the bank charter play as a diversification hedge. The brief leads with what matters and avoids pure source-by-source paraphrasing, but leaves some cross-domain implications slightly underdeveloped."
+    }
+  },
+  "history": [
+    {
+      "eval_model": "claude-haiku-4-5-20251001",
+      "scored_at": "2026-07-07T01:18:12.814904+00:00",
+      "eval_prompt_versions": {
+        "question_coverage": "pm-research-eval-question_coverage@1",
+        "groundedness": "pm-research-eval-groundedness@1",
+        "synthesis_quality": "pm-research-eval-synthesis_quality@1"
+      },
+      "scores": {
+        "question_coverage": 2,
+        "groundedness": 2,
+        "synthesis_quality": 4
+      },
+      "reasoning": {
+        "question_coverage": "The brief provides strong coverage of Upstart's own leadership, funding, and traction, but it is fundamentally a single-company deep dive rather than a competitive brief. The research questions explicitly ask for competitor-by-competitor analysis (\"for each competitor\"), yet the brief contains no comparison to other players in the lending/underwriting space, no competitive positioning, and no systematic evaluation of how Upstart stacks against alternatives. While the \"Gaps & Opportunities\" section hints at competitive angles, it does not address the core requirement: structured intelligence on competing startups' founders, funding, traction, team composition, and market signals. The brief answers questions about Upstart in isolation but fails to deliver the comparative framework the research questions demand.",
+        "groundedness": "While the brief contains several well-sourced claims (founders' backgrounds, Paul Gu becoming CEO in May 2026, Q2 2025 revenue figures, 100+ lending partners, leadership transitions), it makes numerous substantive assertions that are either unsupported by or go significantly beyond the retrieved sources. Critical unsupported claims include: the specific $160M pre-IPO funding amount, the attribution of funding rounds to specific investors (First Round Capital, Khosla, Third Point) without source confirmation, the October 2025 Fortress Investment Group $320M forward-flow deal (not in sources), the 1.5M loans figure for 2025, the $54M GAAP net profit claim, the 91% automation rate, the 100% renewal rate since 2022, the claim about 'top-3 partner concentration at 85% of volume,' and the assertion that Upstart's models face 'CFPB risk' due to black-box opacity. The brief also makes strategic inferences (e.g., 'engineering a more durable capital structure,' the characterization of Paul Gu's succession as signaling 'AI model differentiation is the core strategic bet') that are reasonable synthesis but presented as fact. The sources confirm the bank charter application and UMI existence but do not support the detailed competitive gap analysis or the specific financial metrics cited.",
+        "synthesis_quality": "The brief demonstrates strong synthesis by connecting leadership succession to strategic AI differentiation, linking the Fortress capital deal to a shift away from equity fundraising toward structural durability, and synthesizing market signals (job postings, conference presence, the Macro Index) into a coherent narrative about Upstart's pivot toward bank infrastructure and B2B positioning. The gaps section explicitly contrasts Upstart's strengths (automation, partner relationships) against competitive vulnerabilities by combining insights across funding, traction, and regulatory signals. However, the brief stops short of highest-level synthesis in a few places: the leadership section could more explicitly connect insider tenure to risk/resilience trade-offs; the team composition insight (engineering-heavy, lean on sales) could be contrasted more directly against the capital markets elevation to explain a potential organizational tension; and the personal loan dependence could be tied more explicitly to the bank charter play as a diversification hedge. The brief leads with what matters and avoids pure source-by-source paraphrasing, but leaves some cross-domain implications slightly underdeveloped."
+      }
+    }
+  ]
+}

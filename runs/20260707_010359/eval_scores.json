@@ -1,0 +1,42 @@
+{
+  "latest": {
+    "eval_model": "claude-haiku-4-5-20251001",
+    "scored_at": "2026-07-07T01:08:46.437688+00:00",
+    "eval_prompt_versions": {
+      "question_coverage": "pm-research-eval-question_coverage@1",
+      "groundedness": "pm-research-eval-groundedness@1",
+      "synthesis_quality": "pm-research-eval-synthesis_quality@1"
+    },
+    "scores": {
+      "question_coverage": 4,
+      "groundedness": 3,
+      "synthesis_quality": 3
+    },
+    "reasoning": {
+      "question_coverage": "The brief addresses all seven research questions with substantive detail and supporting evidence. It identifies five key competitors with clear value propositions, explains pricing models (transaction/referral fees, origination fees), maps common features and gaps (HELOC, auto, SMB lending), provides user sentiment data with specific ratings, documents recent launches and strategic moves, and identifies competitive moats for each player. The only minor gaps are: the ideal customer profile (RQ6) is implied but not explicitly defined as a distinct section, and some competitive moats could benefit from slightly more granular explanation of how they function operationally. The brief is well-structured, evidence-based, and actionable.",
+      "groundedness": "Most of the brief's key factual claims are traceable to the retrieved sources: Upstart's 4.9/5 Trustpilot rating (63K reviews), its AI model using 1,600+ variables vs. FICO's 20, the HELOC product launch, Q4 2025 revenue of $296M with 35% YoY growth, competitor identities and their positioning (LendingClub's bank charter, SoFi's multi-product ecosystem, Zest AI's patent portfolio and CU focus, Pagaya's ABS infrastructure, Blend's mortgage workflow focus), and the near-prime/thin-file market opportunity. However, several substantive claims lack direct source support: the specific claim that Upstart earns \"~6–8% in referral/transaction fees from bank partners\" is not explicitly stated in any retrieved source; the assertion that \"top 3 [partners] = 85% of Upstart's volume\" is not found in the materials (sources mention 70% from 11 partners in Q4, but not the top-3 concentration figure); the claim that \"SMB lending — nobody has cracked it with AI\" is an inference not directly supported; and the characterization of \"post-origination/servicing AI is almost entirely undeveloped\" is a broad claim without explicit source backing. The brief also makes several synthetic conclusions (e.g., the tension between consumer and B2B positioning, the categorization of competitors into two types) that are reasonable inferences but go beyond what sources explicitly state. The 7 identified gaps are largely inferential rather than directly sourced.",
+      "synthesis_quality": "The brief demonstrates moderate synthesis quality. It successfully combines multiple sources to create a unified competitive landscape (e.g., positioning Upstart as straddling consumer and B2B, contrasting it against two distinct competitor types) and identifies cross-cutting patterns like underpenetrated segments (auto, HELOC, SMB) and emerging compliance themes (explainability). The 7 gaps section shows interpretive thinking that connects observations across competitors. However, the execution remains partially list-driven: the competitor table is largely descriptive rather than comparative, the pricing section states facts without deeply analyzing their strategic implications, and user sentiment is mentioned but not synthesized against competitive positioning or product strategy. The brief leads with structure and findings rather than with a clear thesis about what matters most for Upstart's strategy. It reads as a well-organized summary with synthesis layered on top, rather than a brief built from the ground up around synthesized insights."
+    }
+  },
+  "history": [
+    {
+      "eval_model": "claude-haiku-4-5-20251001",
+      "scored_at": "2026-07-07T01:08:46.437688+00:00",
+      "eval_prompt_versions": {
+        "question_coverage": "pm-research-eval-question_coverage@1",
+        "groundedness": "pm-research-eval-groundedness@1",
+        "synthesis_quality": "pm-research-eval-synthesis_quality@1"
+      },
+      "scores": {
+        "question_coverage": 4,
+        "groundedness": 3,
+        "synthesis_quality": 3
+      },
+      "reasoning": {
+        "question_coverage": "The brief addresses all seven research questions with substantive detail and supporting evidence. It identifies five key competitors with clear value propositions, explains pricing models (transaction/referral fees, origination fees), maps common features and gaps (HELOC, auto, SMB lending), provides user sentiment data with specific ratings, documents recent launches and strategic moves, and identifies competitive moats for each player. The only minor gaps are: the ideal customer profile (RQ6) is implied but not explicitly defined as a distinct section, and some competitive moats could benefit from slightly more granular explanation of how they function operationally. The brief is well-structured, evidence-based, and actionable.",
+        "groundedness": "Most of the brief's key factual claims are traceable to the retrieved sources: Upstart's 4.9/5 Trustpilot rating (63K reviews), its AI model using 1,600+ variables vs. FICO's 20, the HELOC product launch, Q4 2025 revenue of $296M with 35% YoY growth, competitor identities and their positioning (LendingClub's bank charter, SoFi's multi-product ecosystem, Zest AI's patent portfolio and CU focus, Pagaya's ABS infrastructure, Blend's mortgage workflow focus), and the near-prime/thin-file market opportunity. However, several substantive claims lack direct source support: the specific claim that Upstart earns \"~6–8% in referral/transaction fees from bank partners\" is not explicitly stated in any retrieved source; the assertion that \"top 3 [partners] = 85% of Upstart's volume\" is not found in the materials (sources mention 70% from 11 partners in Q4, but not the top-3 concentration figure); the claim that \"SMB lending — nobody has cracked it with AI\" is an inference not directly supported; and the characterization of \"post-origination/servicing AI is almost entirely undeveloped\" is a broad claim without explicit source backing. The brief also makes several synthetic conclusions (e.g., the tension between consumer and B2B positioning, the categorization of competitors into two types) that are reasonable inferences but go beyond what sources explicitly state. The 7 identified gaps are largely inferential rather than directly sourced.",
+        "synthesis_quality": "The brief demonstrates moderate synthesis quality. It successfully combines multiple sources to create a unified competitive landscape (e.g., positioning Upstart as straddling consumer and B2B, contrasting it against two distinct competitor types) and identifies cross-cutting patterns like underpenetrated segments (auto, HELOC, SMB) and emerging compliance themes (explainability). The 7 gaps section shows interpretive thinking that connects observations across competitors. However, the execution remains partially list-driven: the competitor table is largely descriptive rather than comparative, the pricing section states facts without deeply analyzing their strategic implications, and user sentiment is mentioned but not synthesized against competitive positioning or product strategy. The brief leads with structure and findings rather than with a clear thesis about what matters most for Upstart's strategy. It reads as a well-organized summary with synthesis layered on top, rather than a brief built from the ground up around synthesized insights."
+      }
+    }
+  ]
+}

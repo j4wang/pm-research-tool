@@ -1,0 +1,42 @@
+{
+  "latest": {
+    "eval_model": "claude-haiku-4-5-20251001",
+    "scored_at": "2026-07-07T01:13:48.171378+00:00",
+    "eval_prompt_versions": {
+      "question_coverage": "pm-research-eval-question_coverage@1",
+      "groundedness": "pm-research-eval-groundedness@1",
+      "synthesis_quality": "pm-research-eval-synthesis_quality@1"
+    },
+    "scores": {
+      "question_coverage": 4,
+      "groundedness": 3,
+      "synthesis_quality": 4
+    },
+    "reasoning": {
+      "question_coverage": "The brief addresses all 7 research questions with substantive detail and supporting evidence. Strategic positioning is clearly mapped with explicit competitor positioning statements and FICO as the common enemy. Go-to-market channels, sales cycles, and buyer personas are well-documented. Product trajectory is tracked across all competitors with specific metrics (e.g., Auto +369% YoY). Business health signals are quantified with headcount trends and financial indicators. The only minor gaps are: (1) limited specificity on exact sales cycle ranges by competitor, (2) no detail on partnership channels beyond credit union leagues, and (3) could benefit from more granular timeline on when specific product launches occurred. These are minor depth issues rather than missing coverage.",
+      "groundedness": "Most of the brief's key factual claims are traceable to the retrieved sources, including specific financial metrics (Upstart auto +369% YoY, HELOC +485% YoY; Pagaya 532 employees; Blend 419 employees; Upstart 1,305 employees), product launches (Zest AI's LuLu, Pagaya's POS expansion, LendingClub's rebrand to Happen Bank), and competitive positioning (Pagaya as B2B enabler, Zest AI's explainability focus, credit union partnerships). However, several substantive claims lack clear grounding: the assertion that Zest AI has \"300 CU relationships vs. Upstart's near-zero\" is not explicitly stated in sources (only that Zest secured customer-led investment and SchoolsFirst is mentioned); the claim that \"top 3 partners = 61% of revenue\" for Upstart is not found in the retrieved material; the characterization of Upstart as requiring \"more workflow integration\" compared to Pagaya's \"invisible back-office\" positioning is inferred rather than directly sourced; and the statement that \"everyone names FICO as the enemy, not each other\" is supported only for Upstart. The brief also makes strategic inferences (e.g., LendingClub rebrand as eventual threat to Upstart's marketplace) that go beyond what sources explicitly support, though these are reasonable syntheses.",
+      "synthesis_quality": "The brief demonstrates strong synthesis by drawing cross-source conclusions that require combining multiple data points: the observation that 'everyone names FICO as the enemy, not each other' synthesizes competitive positioning across all four companies; the contrast between Pagaya's 'invisible back-office' positioning versus Upstart's workflow integration requirement combines product architecture with go-to-market strategy; the identification of credit union leagues as a 'leveraged channel that Upstart lacks' connects Zest AI's partnership model to a strategic gap; and the three identified gaps for Upstart (CU segment cession, missing post-origination tools, partner concentration risk) each require synthesizing information across multiple competitors and business metrics. The brief leads with strategic implications rather than listing findings, and the business health table contextualizes headcount trends against momentum signals. However, it stops short of the highest synthesis level by not deeply exploring tensions (e.g., why explainability resonates with regulators but hasn't prevented Upstart's growth, or what the LendingClub rebrand means for Upstart's marketplace model beyond surface-level risk flagging), and some sections like the product trajectory still read as parallel summaries rather than integrated analysis of a coherent market shift."
+    }
+  },
+  "history": [
+    {
+      "eval_model": "claude-haiku-4-5-20251001",
+      "scored_at": "2026-07-07T01:13:48.171378+00:00",
+      "eval_prompt_versions": {
+        "question_coverage": "pm-research-eval-question_coverage@1",
+        "groundedness": "pm-research-eval-groundedness@1",
+        "synthesis_quality": "pm-research-eval-synthesis_quality@1"
+      },
+      "scores": {
+        "question_coverage": 4,
+        "groundedness": 3,
+        "synthesis_quality": 4
+      },
+      "reasoning": {
+        "question_coverage": "The brief addresses all 7 research questions with substantive detail and supporting evidence. Strategic positioning is clearly mapped with explicit competitor positioning statements and FICO as the common enemy. Go-to-market channels, sales cycles, and buyer personas are well-documented. Product trajectory is tracked across all competitors with specific metrics (e.g., Auto +369% YoY). Business health signals are quantified with headcount trends and financial indicators. The only minor gaps are: (1) limited specificity on exact sales cycle ranges by competitor, (2) no detail on partnership channels beyond credit union leagues, and (3) could benefit from more granular timeline on when specific product launches occurred. These are minor depth issues rather than missing coverage.",
+        "groundedness": "Most of the brief's key factual claims are traceable to the retrieved sources, including specific financial metrics (Upstart auto +369% YoY, HELOC +485% YoY; Pagaya 532 employees; Blend 419 employees; Upstart 1,305 employees), product launches (Zest AI's LuLu, Pagaya's POS expansion, LendingClub's rebrand to Happen Bank), and competitive positioning (Pagaya as B2B enabler, Zest AI's explainability focus, credit union partnerships). However, several substantive claims lack clear grounding: the assertion that Zest AI has \"300 CU relationships vs. Upstart's near-zero\" is not explicitly stated in sources (only that Zest secured customer-led investment and SchoolsFirst is mentioned); the claim that \"top 3 partners = 61% of revenue\" for Upstart is not found in the retrieved material; the characterization of Upstart as requiring \"more workflow integration\" compared to Pagaya's \"invisible back-office\" positioning is inferred rather than directly sourced; and the statement that \"everyone names FICO as the enemy, not each other\" is supported only for Upstart. The brief also makes strategic inferences (e.g., LendingClub rebrand as eventual threat to Upstart's marketplace) that go beyond what sources explicitly support, though these are reasonable syntheses.",
+        "synthesis_quality": "The brief demonstrates strong synthesis by drawing cross-source conclusions that require combining multiple data points: the observation that 'everyone names FICO as the enemy, not each other' synthesizes competitive positioning across all four companies; the contrast between Pagaya's 'invisible back-office' positioning versus Upstart's workflow integration requirement combines product architecture with go-to-market strategy; the identification of credit union leagues as a 'leveraged channel that Upstart lacks' connects Zest AI's partnership model to a strategic gap; and the three identified gaps for Upstart (CU segment cession, missing post-origination tools, partner concentration risk) each require synthesizing information across multiple competitors and business metrics. The brief leads with strategic implications rather than listing findings, and the business health table contextualizes headcount trends against momentum signals. However, it stops short of the highest synthesis level by not deeply exploring tensions (e.g., why explainability resonates with regulators but hasn't prevented Upstart's growth, or what the LendingClub rebrand means for Upstart's marketplace model beyond surface-level risk flagging), and some sections like the product trajectory still read as parallel summaries rather than integrated analysis of a coherent market shift."
+      }
+    }
+  ]
+}

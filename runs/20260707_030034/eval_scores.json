@@ -1,0 +1,42 @@
+{
+  "latest": {
+    "eval_model": "claude-haiku-4-5-20251001",
+    "scored_at": "2026-07-07T03:03:33.237146+00:00",
+    "eval_prompt_versions": {
+      "question_coverage": "pm-research-eval-question_coverage@1",
+      "groundedness": "pm-research-eval-groundedness@1",
+      "synthesis_quality": "pm-research-eval-synthesis_quality@1"
+    },
+    "scores": {
+      "question_coverage": 3,
+      "groundedness": 2,
+      "synthesis_quality": 3
+    },
+    "reasoning": {
+      "question_coverage": "The brief addresses most core research questions with solid competitor identification and strategic positioning, but lacks depth in several critical areas. Questions 1, 5, and 6 are well-covered with specific competitor details, funding context, and market segmentation. However, questions 2, 3, and 4 are only partially addressed—pricing models are mentioned in passing but not systematically compared, feature matrices are absent, and user sentiment is not substantiated with actual review data or quotes. Question 7 on competitive moats is touched upon in the competitor table but lacks detailed explanation of how each moat functions or its durability. The brief reads more as a strategic positioning document than a comprehensive competitive analysis, missing the granular evidence (pricing tables, feature comparisons, user reviews) that would make it fully actionable.",
+      "groundedness": "While the brief contains some claims traceable to source material (Upstart's 500+ bank adoption, Q4 2024 growth, national bank charter application, and competitor identification), it makes numerous substantive assertions that lack grounding in the retrieved sources. Key unsupported claims include: specific loan origination growth percentages (+68% YoY), detailed characterizations of each competitor's 'core angle' and 'key moat', the claim that Upstart 'just entered' small-dollar lending, assertions about which gaps 'nobody has a credible solution' for, and the framing of Upstart's bank charter as 'the most consequential move in the category.' The sources confirm Upstart's existence, Q4 2024 performance, and bank charter application, but do not provide the detailed competitive positioning, market gap analysis, or strategic assessments presented in the brief. The brief reads as analyst synthesis and inference rather than research grounded in the retrieved material.",
+      "synthesis_quality": "The brief demonstrates mixed synthesis and summarization. The competitor table is largely summarization—each row restates individual company positioning without cross-source interpretation. However, the '4 Key Gaps & Opportunities' section shows genuine synthesis: it identifies white space by contrasting what competitors *do* offer against what they *don't*, requiring implicit comparison across multiple profiles (e.g., recognizing that no competitor credibly serves thin-file borrowers requires understanding each competitor's underwriting approach). The executive summary also synthesizes by framing the competitive landscape as 'B2B infra plays vs. consumer-facing lenders'—a pattern that emerges from comparing across competitors rather than from any single source. The bank charter insight is synthetic and forward-looking. However, the brief still relies heavily on listing competitor attributes rather than deeply exploring tensions (e.g., why explainable AI hasn't become a consumer trust feature despite regulatory pressure, or how deposit funding creates structural advantages that API-only players cannot match). The structure—summary, then profiles, then gaps—suggests some synthesis happened, but the body could push further into implications and trade-offs that only emerge when sources are actively contrasted."
+    }
+  },
+  "history": [
+    {
+      "eval_model": "claude-haiku-4-5-20251001",
+      "scored_at": "2026-07-07T03:03:33.237146+00:00",
+      "eval_prompt_versions": {
+        "question_coverage": "pm-research-eval-question_coverage@1",
+        "groundedness": "pm-research-eval-groundedness@1",
+        "synthesis_quality": "pm-research-eval-synthesis_quality@1"
+      },
+      "scores": {
+        "question_coverage": 3,
+        "groundedness": 2,
+        "synthesis_quality": 3
+      },
+      "reasoning": {
+        "question_coverage": "The brief addresses most core research questions with solid competitor identification and strategic positioning, but lacks depth in several critical areas. Questions 1, 5, and 6 are well-covered with specific competitor details, funding context, and market segmentation. However, questions 2, 3, and 4 are only partially addressed—pricing models are mentioned in passing but not systematically compared, feature matrices are absent, and user sentiment is not substantiated with actual review data or quotes. Question 7 on competitive moats is touched upon in the competitor table but lacks detailed explanation of how each moat functions or its durability. The brief reads more as a strategic positioning document than a comprehensive competitive analysis, missing the granular evidence (pricing tables, feature comparisons, user reviews) that would make it fully actionable.",
+        "groundedness": "While the brief contains some claims traceable to source material (Upstart's 500+ bank adoption, Q4 2024 growth, national bank charter application, and competitor identification), it makes numerous substantive assertions that lack grounding in the retrieved sources. Key unsupported claims include: specific loan origination growth percentages (+68% YoY), detailed characterizations of each competitor's 'core angle' and 'key moat', the claim that Upstart 'just entered' small-dollar lending, assertions about which gaps 'nobody has a credible solution' for, and the framing of Upstart's bank charter as 'the most consequential move in the category.' The sources confirm Upstart's existence, Q4 2024 performance, and bank charter application, but do not provide the detailed competitive positioning, market gap analysis, or strategic assessments presented in the brief. The brief reads as analyst synthesis and inference rather than research grounded in the retrieved material.",
+        "synthesis_quality": "The brief demonstrates mixed synthesis and summarization. The competitor table is largely summarization—each row restates individual company positioning without cross-source interpretation. However, the '4 Key Gaps & Opportunities' section shows genuine synthesis: it identifies white space by contrasting what competitors *do* offer against what they *don't*, requiring implicit comparison across multiple profiles (e.g., recognizing that no competitor credibly serves thin-file borrowers requires understanding each competitor's underwriting approach). The executive summary also synthesizes by framing the competitive landscape as 'B2B infra plays vs. consumer-facing lenders'—a pattern that emerges from comparing across competitors rather than from any single source. The bank charter insight is synthetic and forward-looking. However, the brief still relies heavily on listing competitor attributes rather than deeply exploring tensions (e.g., why explainable AI hasn't become a consumer trust feature despite regulatory pressure, or how deposit funding creates structural advantages that API-only players cannot match). The structure—summary, then profiles, then gaps—suggests some synthesis happened, but the body could push further into implications and trade-offs that only emerge when sources are actively contrasted."
+      }
+    }
+  ]
+}
