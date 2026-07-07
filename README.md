@@ -204,7 +204,7 @@ The judge runs at temperature 0, so scores don't drift run to run. Each run's sc
 
 ## Eval baseline and staged regression
 
-The eval suite isn't just decoration. It was tested against a deliberate regression to confirm it catches a bad prompt change before that change ships.
+The eval suite isn't just decoration. It was tested against a deliberate regression. A prompt change that weakened coverage was staged, and the suite flagged the score drop against the baseline. The check is manual. Running the suite after a prompt change is a step you take, not a gate that blocks a bad prompt automatically.
 
 The setup. A baseline was captured across three question templates on a fixed topic. Then the system prompt was degraded in Langfuse, from version 1 to a weakened version 2 that told the model to answer fewer questions and keep the brief short. The templates were re-run on the degraded prompt and re-scored.
 
