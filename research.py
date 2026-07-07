@@ -57,7 +57,7 @@ from observability import get_tracer, get_langfuse, get_system_prompt, try_init_
 
 load_dotenv()
 
-MODEL_DEFAULT = "claude-sonnet-4-6"
+MODEL_DEFAULT = "claude-sonnet-5"
 MAX_TOKENS = 16500
 
 # Circuit breaker: if a single tool fails this many times in a row within
