@@ -64,13 +64,15 @@ LANGFUSE_PUBLIC_KEY=your_key_here
 LANGFUSE_SECRET_KEY=your_key_here
 LANGFUSE_HOST=https://cloud.langfuse.com
 
-# Model (optional, defaults to claude-sonnet-4-6)
-ANTHROPIC_MODEL=claude-sonnet-4-6
+# Model (optional, defaults to claude-sonnet-5)
+ANTHROPIC_MODEL=claude-sonnet-5
 ```
 
 `TAVILY_API_KEY` is read by `mcp-servers/search-server/server.py`, not by `research.py`. If it's missing, the failure surfaces mid-run as a tool result Claude has to work around, not as an immediate startup error. That's an intentional tradeoff: the search server owns its own dependency rather than the client knowing about it.
 
-Sonnet is the right default for this use case. Opus's improvements are concentrated in complex coding and long-horizon engineering tasks, but for research synthesis, the quality difference isn't meaningful and Sonnet runs about 20% cheaper.
+Sonnet is the right default for this use case. Opus is built for complex coding and long-horizon engineering work. Research synthesis doesn't need that, and Sonnet costs less per run.
+
+The default is `claude-sonnet-5`. The project ran on `claude-sonnet-4-6` first. The switch to Sonnet 5 was gated on the eval suite, not made on faith. Both question templates were re-run on Sonnet 5 against the Sonnet 4.6 baseline. Scores held or improved on every dimension. Nothing regressed. See [baseline.md](baseline.md) for the numbers.
 
 ### Google Drive setup (optional)
 
@@ -146,8 +148,15 @@ pm-research-assistant/
 │       ├── groundedness.md
 │       └── synthesis_quality.md
 ├── questions/
-│   └── competitive.md       # Example question template
-├── runs/                    # Run artifacts (gitignored)
+│   ├── competitive.md          # Example question template
+│   ├── competitive-deep.md     # Strategic / go-to-market questions
+│   └── competitive-startup.md  # Founder / funding / traction questions
+├── tests/
+│   ├── test_get_system_prompt.py  # Unit tests for prompt resolution
+│   └── degrade_brief.py           # Harness to verify judges discriminate
+├── build_baseline.py        # Generates the score tables in baseline.md
+├── baseline.md              # Eval baseline and staged regression record
+├── runs/                    # Run artifacts (gitignored except committed baseline runs)
 ├── token.json               # Drive OAuth token (gitignored)
 ├── credentials.json         # Drive OAuth client credentials (gitignored)
 ├── requirements.txt
@@ -168,7 +177,7 @@ pm-research-assistant/
 6. Claude keeps going until it has enough to write the brief.
 7. If a Notion page ID is set, Claude calls the Notion tool to save the output.
 8. The full run is written to `runs/<timestamp>/result.json`: tool calls (with per-call error flags), token counts, trace IDs, any tools dropped during the run, and the brief itself.
-9. The eval suite runs automatically, scoring the brief on coverage, groundedness, and synthesis quality, with results logged to Langfuse.
+9. The eval suite runs automatically, scoring the brief on coverage, groundedness, and synthesis quality. Scores are written to `runs/<timestamp>/eval_scores.json` and logged to Langfuse.
 
 ### Circuit breaker on repeated tool failures
 
@@ -187,7 +196,23 @@ Each research run produces:
 - *Groundedness*: are the claims traceable to retrieved sources?
 - *Synthesis quality*: does the brief draw conclusions, or just summarize?
 
-The system prompt is versioned in Langfuse, so prompt changes are tracked and you can compare eval scores across versions.
+The system prompt is versioned in Langfuse, so prompt changes are tracked and you can compare eval scores across versions. The three eval prompts are versioned the same way, under a separate `pm-research-eval-` namespace. A change to grading criteria is tracked just like a change to the research prompt.
+
+The judge runs at temperature 0, so scores don't drift run to run. Each run's scores are also written to `runs/<timestamp>/eval_scores.json`, alongside the eval model and the exact eval prompt versions used. That file is the durable record. A reviewer can read it without a Langfuse login, and a score can always be traced back to the grading criteria that produced it.
+
+---
+
+## Eval baseline and staged regression
+
+The eval suite isn't just decoration. It was tested against a deliberate regression to confirm it catches a bad prompt change before that change ships.
+
+The setup. A baseline was captured across three question templates on a fixed topic. Then the system prompt was degraded in Langfuse, from version 1 to a weakened version 2 that told the model to answer fewer questions and keep the brief short. The templates were re-run on the degraded prompt and re-scored.
+
+The result. On the deep template, coverage fell from 4 to 2. That is a two-point drop tied to a single prompt version change, caught by the suite. On the simpler competitive template, coverage fell only one point, which sits inside normal run-to-run variance. The model largely ignored the instruction to keep the brief short on the easier questions.
+
+The template dependence is the real finding. A weakened prompt does real damage on hard research questions. On easy ones the model compensates. A harness that averaged the templates into one number would have hidden that.
+
+Full numbers, run IDs, and the judge reasoning are in [baseline.md](baseline.md). The five run artifacts it references are committed under `runs/`.
 
 ---
 
@@ -211,7 +236,7 @@ The `questions/` directory holds markdown templates. Copy and edit `competitive.
 
 **Google OAuth in testing mode.** Apps using External OAuth in "Testing" publishing status have their refresh tokens revoked after 7 days, regardless of usage. This is different from a normal expiry and can't be fixed by refreshing; it shows up as `invalid_grant: Bad Request` on the next `creds.refresh()` call. The fix is deleting `token.json` and re-running the interactive auth flow. If you have a Google Workspace account, switching the OAuth consent screen's user type to "Internal" removes this 7-day limit and the verification requirement entirely; personal Gmail accounts don't have that option and will hit this periodically.
 
-**Agentic loop and rate limits.** Conversation history grows with every tool call round-trip. At 30,000 input tokens/minute (the Sonnet default), a run with 8-10 tool calls can hit the ceiling mid-session. The fix was a 5-second sleep between calls plus exponential backoff on rate limit errors.
+**Agentic loop and rate limits.** Conversation history grows with every tool call round-trip. On a low input-tokens-per-minute tier, a run with 8-10 tool calls can hit the ceiling mid-session. The fix was a 5-second sleep between calls plus exponential backoff on rate limit errors. Check your account's current rate limit if runs start backing off more than expected, since limits vary by tier and model.
 
 **Notion's block API.** Two non-obvious constraints: 100-block limit per API call, and table rows must be passed inline with the parent table block in the same request, since they can't be appended separately afterward.
 
